@@ -10,26 +10,44 @@
     banks 1
 .endro
 
+.define WORK_RAM_START $2000
+
 .enum $FFFC export
     _RAM_FFFC_ db
 .ende
 
+.asciitable
+  ; English font is mostly ASCII with some missing and some arrows...
+  ; ASCII:  !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
+  ; Font:   !   % '←→*+,-./0123456789  < >  ABCDEFGHIJKLMNOPQRSTUVWXYZ[→]↑↓
+  ; This is enough for us to map it
+  map ' ' = $20
+.enda
+
+; The format of the codes and internal state
 .struct CheatCode
-    Unused  db
-    Value   db
+    MatchData db ; Only used internally, holds info on the type of match
+    Value db
     Address dw
 .endst
 
-.enum $2000 export ; Device RAM
-    Stack   dsb 128 ; 0-7f = stack
-.ende
-
+; Helper for when code accesses words as a pair of bytes
 .struct Word
     Lo  db
     Hi  db
 .endst
 
-.enum $2080 export
+.enum 0 ; all are multiples of 2 so dw...
+  ScannerMode_Lives dw
+  ScannerMode_Timer dw
+  ScannerMode_Energy dw
+  ScannerMode_Power dw
+  ScannerMode_Status dw
+  ScannerMode_Other dw
+.ende
+
+.enum WORK_RAM_START export ; Device RAM
+    Stack   dsb 128 ; 0-7f = stack
     _RAM_2080_CurrentItemDigit db
     _RAM_2081_CurrentItemRowIndex db
     _RAM_2082_HexDigitsPerRow db
@@ -39,35 +57,31 @@
     _RAM_2088_DataLocation instanceof Word
     _RAM_208A_LowNibbleMaxValue db
     _RAM_208B_HighNibbleMaxValue db
-    _RAM_208C db
+    _RAM_208C_ScannerMode db ; 0 = lives, 2 = timer, 4 = energy, 6 = power, 8 = status, 10 = other
     _RAM_208D_Sign db
     _RAM_208E_SignedMode db
     _RAM_208F_ScannerActive db
-    _RAM_2090 db
-    _RAM_2091 db
+    _RAM_2090_MatchCacheEndPointer instanceof Word
     _RAM_2092 db
     _RAM_2093 db
-    _RAM_2094 db
-    _RAM_2095 db
+    _RAM_2094_MatchCacheWritePointer instanceof Word
     _RAM_2096 db
     _RAM_2097 db
-    _RAM_2098 db
-    _RAM_2099 db
-    _RAM_209A db
-    _RAM_209B db
-    _RAM_209C db
-    State1 db ; _RAM_209d
+    _RAM_2098_BytesRemainingToSearch instanceof Word
+    _RAM_209A_NextAddressForSearch instanceof Word
+    _RAM_209C_IncompleteSearch db
+    _RAM_209D db
     _RAM_209E db
     _RAM_209F db
     CheatCodes instanceof CheatCode 6
 .ende
 
 .enum $20c0 export
-  _RAM_20c0 db
+  _RAM_20c0_SearchCandidates dsb 6 ; Search value in hex, BCD, then both as n-1 and n+1
 .ende
 
 .enum $2100 export
-  _RAM_2100 db
+  _RAM_2100_MatchCache instanceof CheatCode $7c0 ; Holds info on matches - 4 bytes per entry, goes up to $4000
 .ende
 
 ; Ports
@@ -83,6 +97,28 @@
 .define Port_VCounter $7E
 .define Port_IOPort1 $DC
 
+; VDP constants
+.define VDP_WRITE_MASK $4000
+.define TILEMAP_ADDRESS $3800
+.define TILEMAP_ROW_COUNT 32
+.define TILE_SIZE 32
+
+; Helpers for when the game addresses video memory
+.macro LD_HL_Tilemap args x, y
+    ld hl, VDP_WRITE_MASK | TILEMAP_ADDRESS + ((y * TILEMAP_ROW_COUNT) + x) * 2
+.endm
+.macro LD_DE_Tilemap args x, y
+    ld de, VDP_WRITE_MASK | TILEMAP_ADDRESS + ((y * TILEMAP_ROW_COUNT) + x) * 2
+.endm
+.macro LD_HL_TILE args index
+    ld hl, VDP_WRITE_MASK + index * TILE_SIZE
+.endm
+
+; Loading values into B and C at the same time
+.macro LD_BC args b, c
+  ld bc, b << 8 | c
+.endm
+
 .emptyfill $ff
 
 .bank 0 slot 0
@@ -92,11 +128,12 @@
     jp Boot
 
 .org $7
-_DATA_7_:
+JumpToMenuButton:
 .db $fe ; Seems to be a status register, or related to some switch state?
 
 .org $38
 InterruptHandler:
+    ; It's not clear why this is here.
     nop
     jp InterruptHandlerImpl
 
@@ -106,7 +143,7 @@ InterruptHandler:
 InterruptHandlerImpl:
     push af
     push hl
-      ld a, (_DATA_7_)
+      ld a, (JumpToMenuButton)
       bit 0, a
       jr nz, +
       jp 0 ; Reset to the menu
@@ -134,16 +171,20 @@ InterruptHandlerImpl:
     pop af
     ; Then go to the "real" interrupt handler
     jp InterruptHandler
+    
+    ; Technical note: this interrupt handler could be optimised for speed
+    ; by having it instead in RAM and modifying literals for the cheat codes
+    ; (and returning earlier when there are fewer than 6).
 
 Boot:
     ; Put stack in cheat device RAM
     ld sp, Stack + _sizeof_Stack - 1
 
     ; Mute PSG
-    ld bc, $0400 | Port_PSG
-    ld a, $9F
+    LD_BC 4, Port_PSG
+    ld a, $9F ; Mute channel 0
 -:  out (c), a
-    add a, $20
+    add a, $20 ; Increment channel index
     djnz -
 
     ; Disable serial stuff?
@@ -159,7 +200,7 @@ Boot:
     jr nz, -
 
     ; Initialise VDP registers
-    ld bc, (_sizeof_VDPRegisterInitialisationData * 256) | $80
+    LD_BC _sizeof_VDPRegisterInitialisationData, $80
     ld hl, VDPRegisterInitialisationData
 -:  ld a, (hl)
     out (Port_VDPAddress), a
@@ -171,11 +212,11 @@ Boot:
 
     ; Blank all of VRAM
     ld de, $2000
-    ld hl, $4000
+    ld hl, VDP_WRITE_MASK
     call ZeroVRAM
 
-    ; Load font at tile index 20 so tile indices match ASCII
-    ld hl, $4400
+    ; Load font at tile index $20 so tile indices match ASCII
+    LD_HL_TILE $20
     call SetVRAMAddressToHL
     ld de, EnglishFont
     ld hl, $0200
@@ -184,11 +225,11 @@ Boot:
 
     ; Load inverse font after that (tile index 84)
     ld de, EnglishFont + 8 * 16 ; skip punctuation
-    ld hl, $0100 ; Not all of them
+    ld hl, $0100 ; Not all of them - we only need 0-9 and A-F
     ld a, $FF ; This makes them inverted
     call LoadTiles1bpp
 
-    ld hl, $5400 ; Tile index 160
+    LD_HL_TILE 160
     call SetVRAMAddressToHL
     ld de, JapaneseFont
     ld hl, $0280
@@ -199,26 +240,26 @@ Boot:
     ld hl, $C000
     call SetVRAMAddressToHL
     ld de, Palette
-    ld b, $20
+    ld b, 16*2 ; 16 entries
 -:  ld a, (de)
     out (Port_VDPData), a
     inc de
     djnz -
 
-    ; Enable on-cart RAM?
+    ; Enable on-cart RAM
     ld a, $08
     ld (_RAM_FFFC_), a
 
     ld bc, Text_Title
-    ld hl, $78CC ; Tilemap 6, 3
+    LD_HL_Tilemap 6, 3
     call EmitText
     ; Following text is instructions
-    ld hl, $7c4c ; 6, 17
+    LD_HL_Tilemap 6, 17
     call EmitText
 
     ; If not 1, use second set of values
-    ld a, (State1)
-    cp $01
+    ld a, (_RAM_209D)
+    cp 1
     jr nz, +
 
     ld a, (_RAM_208F_ScannerActive)
@@ -226,18 +267,18 @@ Boot:
     jr z, +++
     
     ; Values 1
-    ld de, $1F40
-    ld hl, $20C0
+    ld de, $2000 - $c0
+    ld hl, _RAM_20c0_SearchCandidates
     jr ++
 
     ; Values 2
 LABEL_157_:
-+:  ld de, $1F80
++:  ld de, $2000 - $80
     ld hl, _RAM_2080_CurrentItemDigit
     call ZeroRAM
 
     ld a, $01
-    ld (State1), a
+    ld (_RAM_209D), a
 
 Menu_MainMenu: ; $0165
 ++: ld bc, Text_MainMenu
@@ -247,21 +288,24 @@ Menu_MainMenu: ; $0165
     ld a, 2 ; Initial item chosen
     jp ShowSelectionMenu
 
-LABEL_173_:
-    ld a, $01
+SetScannerActive:
+; hl = menu for next scanner action
+    ld a, 1
     ld (_RAM_208F_ScannerActive), a
     ld a, l
     ld (_RAM_2092), a
     ld a, h
     ld (_RAM_2093), a
-LABEL_180_:
-    ld a, 2
+    ; fall through
+    
+Menu_ScannerMenu:
+    ld a, 2 ; Enter Codes selected
 
 +++:
     push af
       ld bc, Text_ScannerMenu
       call DrawTwoPartTextScreen
-      ld hl, _DATA_1C2A_
+      ld hl, SelectionMenuData_ScannerMenu
     pop af
     jp ShowSelectionMenu
 
@@ -277,7 +321,7 @@ Menu_EnterCodes:
     ld bc, Text_EnterCodes
     call DrawTwoPartTextScreen
     ld hl, EditHexData_EnterCodes
-    ld de, $79E0 ; 16, 7
+    LD_DE_Tilemap 16. 7
     ld bc, CheatCodes 
     jp EditHex
 
@@ -314,6 +358,8 @@ Menu_EnterCodes_PostEdit:
     ld a, $3A
     ld (hl), a
     jp (hl)
+    ; Technical note: it would take 20 bytes (?) to simply assemble and copy the code and run it.
+    ; This way is very marginally smaller but harder to read.
 
 Menu_LivesScanner:
     ld bc, Text_LivesScanner
@@ -322,28 +368,27 @@ Menu_LivesScanner:
     jr +
 
 Menu_LivesScanner_PostEdit:
-    call _LABEL_3F2_
-    xor a
-    call _LABEL_443_
-    ld hl, $01EC
-    jp LABEL_173_
+    call CalculateSearchValues
+    xor a ; ScannerMode_Lives
+    call PerformInitialSearch
+    ld hl, Menu_LivesScannerUpdate
+    jp SetScannerActive
 
 Menu_LivesScannerUpdate:
     ld bc, Text_LivesScanner
     ld de, Text_LivesScannerUpdate
     call DrawTwoPartTextScreen2
     ld hl, EditHexData_LivesScannerUpdate
-+:
-    ld de, $79DE ; 15, 7
-    ld bc, _RAM_20c0
++:  LD_DE_Tilemap 15, 7
+    ld bc, _RAM_20c0_SearchCandidates
     jp EditHex
 
-_LABEL_201_:
-    call _LABEL_3F2_
-    xor a
-    call _LABEL_50A_
-    call _LABEL_418_
-    jp LABEL_180_
+Menu_LivesScannerUpdate_PostEdit:
+    call CalculateSearchValues
+    xor a ; ScannerMode_Lives
+    call PerformSearchUpdate
+    call CheckForIncompleteSearch
+    jp Menu_ScannerMenu
 
 Menu_TimerScanner:
     ld bc, Text_TimerScanner
@@ -352,16 +397,16 @@ Menu_TimerScanner:
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_21A_:
-    ld a, $02
-    call _LABEL_443_
-    ld hl, $0225
-    jp LABEL_173_
+    ld a, ScannerMode_Timer
+    call PerformInitialSearch
+    ld hl, _LABEL_225_
+    jp SetScannerActive
 
 _LABEL_225_:
     ld bc, Text_TimerScanner
     ld de, Text_TimerScannerUpdate
     call DrawTwoPartTextScreen2
-    ld hl, $79DC ; 14, 7
+    LD_HL_Tilemap 14, 7
     call SetVRAMAddressToHL
     ld a, '+'
     call WriteAToVDPAs16Bit
@@ -370,7 +415,7 @@ _LABEL_225_:
     ld a, $01
     ld (_RAM_208E_SignedMode), a
     ld hl, _DATA_1547_
-    ld de, $79DE ; 15, 7
+    LD_DE_Tilemap 15, 7
     ld bc, _RAM_209E
     jp EditHex
 
@@ -389,20 +434,20 @@ _LABEL_24E_:
 Menu_EnergyScanner:
     ld bc, Text_EnergyScanner
     call DrawTwoPartTextScreen
-    ld hl, _DATA_1621_
+    ld hl, SelectionMenuData_EnergyScanner
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_26A_:
-    ld a, $04
-    call _LABEL_443_
-    ld hl, $0275
-    jp LABEL_173_
+    ld a, ScannerMode_Energy
+    call PerformInitialSearch
+    ld hl, _LABEL_275_
+    jp SetScannerActive
 
 _LABEL_275_:
     ld bc, Text_EnergyScanner
     ld de, Text_EnergyScannerUpdate
     call DrawTwoPartTextScreen2
-    ld hl, _DATA_16E3_
+    ld hl, SelectionMenuData_EnergyScannerUpdate
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_284_:
@@ -424,20 +469,20 @@ _LABEL_290_:
 Menu_PowerScanner:
     ld bc, Text_PowerScanner
     call DrawTwoPartTextScreen
-    ld hl, _DATA_17C0_
+    ld hl, SelectionMenuData_PowerScanner
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_2A0_:
-    ld a, $06
-    call _LABEL_443_
-    ld hl, $02AB
-    jp LABEL_173_
+    ld a, ScannerMode_Power
+    call PerformInitialSearch
+    ld hl, _LABEL_2AB_
+    jp SetScannerActive
 
 _LABEL_2AB_:
     ld bc, Text_PowerScanner
     ld de, Text_PowerScannerUpdate
     call DrawTwoPartTextScreen2
-    ld hl, _DATA_1882_
+    ld hl, SelectionMenuData_PowerScannerUpdate
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_2BA_:
@@ -451,27 +496,27 @@ _LABEL_2BE_:
 _LABEL_2C2_:
     ld a, $86
 _LABEL_2C4_:
-    call _LABEL_50A_
-    call _LABEL_418_
-    jp LABEL_180_
+    call PerformSearchUpdate
+    call CheckForIncompleteSearch
+    jp Menu_ScannerMenu
 
 Menu_StatusScanner:
     ld bc, Text_StatusScanner
     call DrawTwoPartTextScreen
-    ld hl, _DATA_195D_
+    ld hl, SelectionMenuData_StatusScanner
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_2D9_:
-    ld a, $08
-    call _LABEL_443_
-    ld hl, $02E4
-    jp LABEL_173_
+    ld a, ScannerMode_Status
+    call PerformInitialSearch
+    ld hl, _LABEL_2E4_
+    jp SetScannerActive
 
 _LABEL_2E4_:
     ld bc, Text_StatusScanner
     ld de, Text_StatusScannerUpdate
     call DrawTwoPartTextScreen2
-    ld hl, _DATA_1A1F_
+    ld hl, SelectionMenuData_StatusScannerUpdate
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_2F3_:
@@ -485,20 +530,20 @@ _LABEL_2F7_:
 Menu_OtherPossibilityScanner:
     ld bc, Text_OtherPossibility
     call DrawTwoPartTextScreen
-    ld hl, _DATA_1AF8_
+    ld hl, SelectionMenuData_OtherPossibility
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_307_:
-    ld a, $0A
-    call _LABEL_443_
-    ld hl, $0312
-    jp LABEL_173_
+    ld a, ScannerMode_Other
+    call PerformInitialSearch
+    ld hl, _LABEL_312_
+    jp SetScannerActive
 
 _LABEL_312_:
     ld bc, Text_OtherPossibility
     ld de, Text_OtherPossibilityUpdate
     call DrawTwoPartTextScreen2
-    ld hl, _DATA_1BBA_
+    ld hl, SelectionMenuData_OtherPossibilityUpdate
     jp ShowSelectionMenu_FirstItemActive
 
 _LABEL_321_:
@@ -517,9 +562,9 @@ _LABEL_329_:
     jp (hl)
 
 _LABEL_332_:
-    ld bc, _DATA_1C33_
+    ld bc, Text_ParametersList
     call BlankScreenWithTitle
-    ld hl, _DATA_1C48_
+    ld hl, ParametersListData
     ld a, (hl)
     inc hl
     ld (_RAM_2082_HexDigitsPerRow), a
@@ -527,10 +572,10 @@ _LABEL_332_:
     inc hl
     push hl
     ld l, a
-    ld a, (_RAM_2091)
+    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
     cp $21
     jr nz, +
-    ld a, (_RAM_2090)
+    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
     or a
     jr z, ++
     cp $18
@@ -543,8 +588,8 @@ _LABEL_332_:
     ld (_RAM_2083_RowCount), a
     xor a
     ld (_RAM_2084_NameTableLocation.Hi), a
-    ld hl, $79D2
-    ld de, _RAM_2100
+    LD_HL_Tilemap 9, 7
+    ld de, _RAM_2100_MatchCache
     call _LABEL_8AB_PrintHex
     xor a
     ld (_RAM_208D_Sign), a
@@ -555,25 +600,25 @@ _LABEL_332_:
 
 ++:
     pop hl
-    ld a, (_RAM_209C)
+    ld a, (_RAM_209C_IncompleteSearch)
     or a
     jr z, +
-    ld bc, _DATA_1CDF_
+    ld bc, Text_PleaseContinue
     call ++
-    jp LABEL_180_
+    jp Menu_ScannerMenu
 
 +:
-    ld bc, _DATA_1C76_
+    ld bc, Text_ForOtherPossibilities
     call ++
     jp LABEL_157_
 
 ++:
     push bc
-      ld bc, _DATA_1C4C_
-      ld hl, $79CC
+      ld bc, Text_NothingValid
+      LD_HL_Tilemap 6, 7
     call EmitText
     pop bc
-    ld hl, $7A4C
+    LD_HL_Tilemap 6, 9
     call EmitText
     call Delay
     ; Wait for Start to be pressed
@@ -583,9 +628,9 @@ _LABEL_332_:
     ret
 
 _LABEL_3AC_:
-    ld hl, _RAM_2100
-    ld bc, $20A0
-    ld d, $06
+    ld hl, _RAM_2100_MatchCache
+    ld bc, CheatCodes
+    ld d, 6 ; Maximum number of cheat codes
     ld a, (_RAM_208D_Sign)
     ld e, a
 ---:
@@ -593,75 +638,78 @@ _LABEL_3AC_:
     rrca
     ld e, a
     push de
-    jr c, +
-    inc hl
-    inc hl
-    inc hl
-    inc hl
+      jr c, +
+      inc hl
+      inc hl
+      inc hl
+      inc hl
 --:
     pop de
     dec d
     jr nz, ---
-    jp LABEL_180_
+    jp Menu_ScannerMenu
 
 +:
-    push hl
-    ld e, $04
+      push hl
+        ld e, $04
 -:
-    ld a, (hl)
-    inc hl
-    ld (bc), a
-    inc bc
-    dec e
-    jr nz, -
-    pop de
-    push de
+        ld a, (hl)
+        inc hl
+        ld (bc), a
+        inc bc
+        dec e
+        jr nz, -
+      pop de
+      push de
 -:
-    ld a, (_RAM_2091)
-    cp h
-    jr nz, +
-    ld a, (_RAM_2090)
-    cp l
-    jr z, ++
+        ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
+        cp h
+        jr nz, +
+        ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
+        cp l
+        jr z, ++
 +:
-    ld a, (hl)
-    inc hl
-    ld (de), a
-    inc de
-    jr -
+        ld a, (hl)
+        inc hl
+        ld (de), a
+        inc de
+        jr -
 
 ++:
-    ld a, e
-    ld (_RAM_2090), a
-    ld a, d
-    ld (_RAM_2091), a
-    pop hl
-    jr --
+        ld a, e
+        ld (_RAM_2090_MatchCacheEndPointer.Lo), a
+        ld a, d
+        ld (_RAM_2090_MatchCacheEndPointer.Hi), a
+      pop hl
+      jr --
 
-_LABEL_3F2_:
+CalculateSearchValues:
     ; Get search value
-    ld hl, _RAM_20c0
+    ld hl, _RAM_20c0_SearchCandidates
     ld a, (hl)
     inc hl
     ; Process raw value
-    call +
+    call _convertBCD
     ; Then process n+1 in decimal
     ld a, c
     inc a
     daa
     ld (hl), a ; Store it in the following byte
     inc hl
-    call +
-    ; Then process n-1 in dcimal
+    call _convertBCD
+    ; Then process n-1 in decimal
     ld a, c
     sub 2
     daa
     ld (hl), a ; Store it in the follwoing byte
     inc hl
     ; fall through
-+:
+_convertBCD:
+    ; This is converting BCD to the true value,
+    ; e.g. $12 -> 12
+    ; Hex values produce nonsense.
     ld c, a
-    and $F0
+    and $F0 ; High digit * 10
     rrca
     ld b, a
     rrca
@@ -669,143 +717,169 @@ _LABEL_3F2_:
     add a, b
     ld b, a
     ld a, c
-    and $0F
+    and $0F ; Add to low digit
     add a, b
     ld (hl), a
     inc hl
     ret
 
-_LABEL_418_:
-    ld a, (_RAM_209C)
+CheckForIncompleteSearch:
+    ld a, (_RAM_209C_IncompleteSearch)
     or a
     ret z
     xor a
-    ld (_RAM_209C), a
-    ld a, (_RAM_2090)
-    ld (_RAM_2094), a
-    ld a, (_RAM_2091)
-    ld (_RAM_2095), a
-    ld a, (_RAM_2098)
+    ld (_RAM_209C_IncompleteSearch), a
+    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
+    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
+    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
+    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    ld a, (_RAM_2098_BytesRemainingToSearch.Lo)
     ld e, a
-    ld a, (_RAM_2099)
+    ld a, (_RAM_2098_BytesRemainingToSearch.Hi)
     ld d, a
-    ld a, (_RAM_209A)
+    ld a, (_RAM_209A_NextAddressForSearch.Lo)
     ld c, a
-    ld a, (_RAM_209B)
+    ld a, (_RAM_209A_NextAddressForSearch.Hi)
     ld b, a
     bit 6, a
     jr z, +
     jr +++
 
-_LABEL_443_:
-    ld (_RAM_208C), a
-    call _LABEL_925_
+PerformInitialSearch:
+    ; a = mode
+    ld (_RAM_208C_ScannerMode), a
+    
+    call ShowSearchMemoryText
+    
     xor a
-    ld (_RAM_2094), a
+    ld (_RAM_2094_MatchCacheWritePointer), a
     ld a, $21
-    ld (_RAM_2095), a
-    ld bc, $8000
+    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    
+    ld bc, $8000 ; Start of save RAM
+    ; Save value
     ld a, (bc)
     ld e, a
+    ; Check for writeability
     ld a, $55
     ld (bc), a
     ld d, a
     ld a, (bc)
     cp d
-    jr nz, ++
+    jr nz, _NotWriteable
     ld a, $AA
     ld (bc), a
     ld d, a
     ld a, (bc)
     cp d
-    jr nz, ++
+    jr nz, _NotWriteable
+    ; Restore value
     ld a, e
     ld (bc), a
-    ld de, $2000
+    ; bc = $8000 = start address
+    ld de, 8*1024 ; search size
 +:
-    call _LABEL_482_
-    ld a, (_RAM_209C)
+    call _DoSearch
+    ld a, (_RAM_209C_IncompleteSearch)
     or a
     jr nz, ++++
-++:
-    ld bc, $C000
-    ld de, $2000
+    ; Fall through if not done
+_NotWriteable:
+    ld bc, $C000 ; start address
+    ld de, 8*1024 ; search size
 +++:
-    call _LABEL_482_
+    call _DoSearch
 ++++:
-    call _LABEL_5D7_
+    call SaveMatchCacheEndPointer
     ret
 
-_LABEL_482_:
+_DoSearch:
+; bc = start address
+; de = search size
     push de
-    ld a, (bc)
-    ld e, a
-    ld hl, _RAM_20c0
-    ld a, (_RAM_208C)
-    ld d, a
-    and $0E
-    jr z, _LABEL_4AD_
-    cp $02
-    jr nz, ++
-    ld a, d
-    ld d, $02
-    bit 0, a
-    jr z, +
-    call _LABEL_4FB_
-    add a, e
-    daa
-    ld e, a
-    jr ++
+      ; Get candidate byte
+      ld a, (bc)
+      ld e, a
+      ; Point at candidates bytes
+      ld hl, _RAM_20c0_SearchCandidates
+      ; check mode
+      ld a, (_RAM_208C_ScannerMode)
+      ld d, a
+      and $0E ; Scanner modes are all multiples of 2
+      jr z, _Lives
+      cp 2
+      jr nz, ++ ; All others match on all memory addresses at first
+_Timer:
+      ; Check low bit
+      ld a, d
+      ld d, ScannerMode_Timer
+      bit 0, a
+      jr z, +
+      call _GetHighNibble
+      add a, e
+      daa
+      ld e, a
+      jr ++
++:    call _GetHighNibble
+      ld l, a
+      ld a, e
+      sub l
+      daa
+      ld e, a
+      jr ++
 
-+:
-    call _LABEL_4FB_
-    ld l, a
-    ld a, e
-    sub l
-    daa
-    ld e, a
-    jr ++
-
-_LABEL_4AD_:
-    ld a, (hl)
-    inc hl
-    cp e
-    jr z, ++
-    inc d
-    ld a, d
-    cp $06
-    jr nz, _LABEL_4AD_
-    jr +++
+_Lives:
+      ; Get candidate and point to next
+-:    ld a, (hl)
+      inc hl
+      ; Compare
+      cp e
+      jr z, ++ ; Match
+      inc d ; starts at 0
+      ld a, d
+      cp 6
+      jr nz, -
+      jr +++
 
 ++:
-    call _LABEL_4DE_
-+++:
-    inc bc
+      call _MatchFound
++++:  ; Try next byte
+      inc bc
     pop de
     dec de
     ld a, d
     or e
-    ret z
+    ret z ; Return when done
+    ; Wait got h = $40 which means we ran out of RAM to store it in
+    ; (hl is the value in _RAM_2094_MatchCacheWritePointer now)
     ld a, h
-    cp $40
-    jr nz, _LABEL_482_
+    cp (_RAM_2100_MatchCache + _sizeof__RAM_2100_MatchCache) >> 8
+    jr nz, _DoSearch
+    ; Save where we got to, as we can't track all RAM addresses at once -
+    ; there are up to 16K of them to track and we have space to track 1984 of them
     ld a, e
-    ld (_RAM_2098), a
+    ld (_RAM_2098_BytesRemainingToSearch.Lo), a
     ld a, d
-    ld (_RAM_2099), a
+    ld (_RAM_2098_BytesRemainingToSearch.Hi), a
     ld a, c
-    ld (_RAM_209A), a
+    ld (_RAM_209A_NextAddressForSearch.Lo), a
     ld a, b
-    ld (_RAM_209B), a
-    ld a, $01
-    ld (_RAM_209C), a
+    ld (_RAM_209A_NextAddressForSearch.Hi), a
+    ld a, 1
+    ld (_RAM_209C_IncompleteSearch), a
     ret
 
-_LABEL_4DE_:
-    ld a, (_RAM_2094)
+_MatchFound:
+; d = index of matched value in the candidates (0-5)
+; e = matched value
+; bc = address of matched value
+; All four are stored to the "match cache"
+    ; Get pointer for where to store the match data?
+    ld a, (_RAM_2094_MatchCacheWritePointer.Lo)
     ld l, a
-    ld a, (_RAM_2095)
+    ld a, (_RAM_2094_MatchCacheWritePointer.Hi)
     ld h, a
+    ; Store match info
     ld a, d
     ld (hl), a
     inc hl
@@ -818,13 +892,14 @@ _LABEL_4DE_:
     ld a, b
     ld (hl), a
     inc hl
+    ; Save pointer
     ld a, l
-    ld (_RAM_2094), a
+    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
     ld a, h
-    ld (_RAM_2095), a
+    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
     ret
 
-_LABEL_4FB_:
+_GetHighNibble:
     rrca
     rrca
     rrca
@@ -840,22 +915,27 @@ _LABEL_502_:
     add a, h
     ret
 
-_LABEL_50A_:
-    ld (_RAM_208C), a
-    call _LABEL_925_
-    ld hl, _RAM_2100
-    ld a, (_RAM_2091)
+PerformSearchUpdate:
+; a = scanner mode + flags
+    ld (_RAM_208C_ScannerMode), a
+    call ShowSearchMemoryText
+    
+    ; Check if the update pointer (?) is at the start of the cache
+    ld hl, _RAM_2100_MatchCache
+    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
     cp h
     jr nz, +
-    ld a, (_RAM_2090)
+    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
     cp l
-    ret z
+    ret z ; If matching, there is no update to do
 +:
+    ; Point to the start of the match cache
     ld a, l
-    ld (_RAM_2094), a
+    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
     ld a, h
-    ld (_RAM_2095), a
-_LABEL_526_:
+    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+_PerformSearchUpdate_loop:
+    ; Read the match into d, e, bc
     ld a, (hl)
     inc hl
     ld d, a
@@ -868,145 +948,150 @@ _LABEL_526_:
     ld a, (hl)
     inc hl
     ld b, a
+    
     push hl
     push de
-    push bc
-    ld a, (bc)
-    ld c, a
-    push de
-    ld hl, _DATA_1D5D
-    ld a, (_RAM_208C)
-    ld b, a
-    and $0E
-    ld e, a
-    ld d, $00
-    add hl, de
-    ld a, (hl)
-    inc hl
-    ld e, a
-    ld a, (hl)
-    ld h, a
-    ld l, e
-    ld a, b
-    pop de
-    jp (hl)
-    ld hl, _RAM_20c0
-    ld a, d
-    and $FE
-    ld e, a
-    ld d, $00
-    add hl, de
-    ld a, (hl)
-    inc hl
-    ld e, a
-    ld a, (hl)
-    ld d, a
-    ld a, c
-    cp e
-    jr z, _LABEL_5B5_
-    cp d
-    jr z, _LABEL_5B5_
-    jr _LABEL_5B1_
+      push bc
+        ; Read the value that is at the match address now
+        ld a, (bc)
+        ld c, a
+        push de
+          ; Look up the function that checks it
+          ld hl, SearchUpdateFunctions
+          ld a, (_RAM_208C_ScannerMode)
+          ld b, a
+          and $0E ; Mask to mode bits
+          ld e, a
+          ld d, $00
+          add hl, de
+          ld a, (hl)
+          inc hl
+          ld e, a
+          ld a, (hl)
+          ld h, a
+          ld l, e
+          ld a, b
+        pop de
+        ; This maps to SearchUpdate_Lives, etc
+        jp (hl)
+    
+SearchUpdate_Lives:
+        ; d is an index into _RAM_20c0_SearchCandidates to say which of the 6
+        ; matched for this candidate. We look up the new value...
+        ld hl, _RAM_20c0_SearchCandidates
+        ld a, d
+        and %11111110 ; This clears the high bit as we try both the normal and BCD versions
+        ld e, a
+        ld d, 0
+        add hl, de
+        ld a, (hl) ; We get the two new candidates into e, d
+        inc hl
+        ld e, a
+        ld a, (hl)
+        ld d, a
+        ld a, c
+        cp e
+        jr z, _KeepMatch
+        cp d
+        jr z, _KeepMatch
+        jr _DiscardMatch
 
-_LABEL_566_:
-    call _LABEL_4FB_
-    bit 0, b
-    jr nz, +
-    add a, e
-    daa
-    jr ++
+SearchUpdate_Timer:
+        call _GetHighNibble
+        bit 0, b
+        jr nz, +
+        add a, e
+        daa
+        jr ++
++:      ld d, a
+        ld a, e
+        sub d
+        daa
+++:     cp c
+        jr z, _KeepMatch
+        jr _DiscardMatch
 
-+:
-    ld d, a
-    ld a, e
-    sub d
-    daa
-++:
-    cp c
-    jr z, _LABEL_5B5_
-    jr _LABEL_5B1_
+SearchUpdate_Power:
+        cp d
+        jr z, _LABEL_5A9_
+        cp $46
+        jr z, +
+        cp $86
+        jr z, ++
+        ld a, d
+        cp $46
+        jr z, ++
++:      ld a, e
+        cp c
+        jr c, _KeepMatch
+        jr _DiscardMatch
+++:     ld a, c
+        cp e
+        jr c, _KeepMatch
+        jr _DiscardMatch
 
-_LABEL_57A_:
-    cp d
-    jr z, _LABEL_5A9_
-    cp $46
-    jr z, +
-    cp $86
-    jr z, ++
-    ld a, d
-    cp $46
-    jr z, ++
-+:
-    ld a, e
-    cp c
-    jr c, _LABEL_5B5_
-    jr _LABEL_5B1_
+SearchUpdate_Status:
+        cp d
+        jr z, +
+        ld a, $FF
+        xor e
+        ld e, a
++:      xor a
+        jr _LABEL_5A9_
 
-++:
-    ld a, c
-    cp e
-    jr c, _LABEL_5B5_
-    jr _LABEL_5B1_
-
-_LABEL_596_:
-    cp d
-    jr z, +
-    ld a, $FF
-    xor e
-    ld e, a
-+:
-    xor a
-    jr _LABEL_5A9_
-
-_LABEL_5A0_:
-    cp d
-    jr z, _LABEL_5A9_
-    ld a, c
-    cp e
-    jr z, _LABEL_5B1_
-    jr _LABEL_5B5_
+SearchUpdate_Other:
+        cp d
+        jr z, _LABEL_5A9_
+        ld a, c
+        cp e
+        jr z, _DiscardMatch
+        jr _KeepMatch
 
 _LABEL_5A9_:
-    and $F0
-    jr nz, _LABEL_5B5_
-    ld a, c
-    cp e
-    jr z, _LABEL_5B5_
-_LABEL_5B1_:
-    pop bc
-    pop de
-    jr ++
+        and $F0
+        jr nz, _KeepMatch
+        ld a, c
+        cp e
+        jr z, _KeepMatch
+        ; fall through
+      
+_DiscardMatch:
+      pop bc
+      pop de
+      jr ++
 
-_LABEL_5B5_:
-    pop bc
-    pop de
-    ld a, (_RAM_208C)
-    ld l, a
-    or l
-    jr z, +
-    and $F0
-    jr nz, +
-    ld d, l
-    ld a, (bc)
-    ld e, a
-+:
-    call _LABEL_4DE_
-++:
-    pop hl
-    ld a, (_RAM_2091)
+_KeepMatch:
+      pop bc
+      pop de
+      ld a, (_RAM_208C_ScannerMode)
+      ld l, a
+      or l
+      jr z, +
+      ; Modes other than ScannerMode_Lives
+      and $F0
+      jr nz, +
+      ; With high bits set
+      ld d, l
+      ld a, (bc)
+      ld e, a
++:    ; We call into this function in order to re-write the match cache "compacted"
+      call _MatchFound
+++: pop hl
+    ; Loop until we get to _RAM_2090_MatchCacheEndPointer
+    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
     cp h
-    jp nz, _LABEL_526_
-    ld a, (_RAM_2090)
+    jp nz, _PerformSearchUpdate_loop
+    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
     cp l
-    jp nz, _LABEL_526_
-_LABEL_5D7_:
-    ld a, (_RAM_2094)
-    ld (_RAM_2090), a
-    ld a, (_RAM_2095)
-    ld (_RAM_2091), a
+    jp nz, _PerformSearchUpdate_loop
+SaveMatchCacheEndPointer:
+    ld a, (_RAM_2094_MatchCacheWritePointer.Lo)
+    ld (_RAM_2090_MatchCacheEndPointer.Lo), a
+    ld a, (_RAM_2094_MatchCacheWritePointer.Hi)
+    ld (_RAM_2090_MatchCacheEndPointer.Hi), a
     ret
 
-_LABEL_5E4_:
+SearchUpdate_Energy:
     cp d
     jr z, _LABEL_5A9_
     cp $04
@@ -1018,7 +1103,7 @@ _LABEL_5E4_:
     ld a, d
     cp $04
     jr z, +
-    jr _LABEL_5B5_
+    jr _KeepMatch
 
 +:
     ld a, e
@@ -1027,12 +1112,12 @@ _LABEL_5E4_:
     ld a, c
 _LABEL_600_:
     cp l
-    jr c, _LABEL_5B1_
-    jr z, _LABEL_5B1_
+    jr c, _DiscardMatch
+    jr z, _DiscardMatch
 _LABEL_605_:
     cp h
-    jr c, _LABEL_5B5_
-    jr _LABEL_5B1_
+    jr c, _KeepMatch
+    jr _DiscardMatch
 
 ++:
     ld a, d
@@ -1040,7 +1125,7 @@ _LABEL_605_:
     jr z, ++
     cp $64
     jr z, +
-    jr _LABEL_5B5_
+    jr _KeepMatch
 
 +:
     ld a, c
@@ -1059,7 +1144,7 @@ _LABEL_605_:
     jr z, ++
     cp $C4
     jr z, +
-    jr _LABEL_5B5_
+    jr _KeepMatch
 
 +:
     ld a, e
@@ -1113,7 +1198,7 @@ _UpdateArrow:
       ld a, (_RAM_2081_CurrentItemRowIndex)
       ld e, a
       push de
-        ld hl, $79CE; 7, 7
+        LD_HL_Tilemap 7, 7
         ld bc, $0040 ; One row
 -:      call SetVRAMAddressToHL
         ld a, ' '
@@ -1124,7 +1209,7 @@ _UpdateArrow:
         add hl, bc
         dec d
         jr nz, -
-        call Delay ; ???
+        call Delay
       pop de
 _WaitForButton:
       ; Wait for a button press
@@ -1193,7 +1278,7 @@ __Button1:
       xor e
       ld e, a
       ld (_RAM_208D_Sign), a
-      ld hl, $79D0 ; 8, 7
+      LD_HL_Tilemap 8, 7
       ld bc, $0040 ; One row
 -:    call SetVRAMAddressToHL
       ld a, e
@@ -1480,7 +1565,7 @@ _Button2_Signed:
     jr z, +
     ld c, '-'
 +:
-    ld hl, $79DC ; 14, 7
+    LD_HL_Tilemap 14, 7
     call SetVRAMAddressToHL
     ld a, c
     call WriteAToVDPAs16Bit
@@ -1523,7 +1608,7 @@ _GetByteToEdit:
     ld b, a
     ret
 
-; Time-wasting loop
+; Time-wasting loop to set the "repeat rate"
 Delay:
     ld hl, $8000
 -:  dec hl
@@ -1653,29 +1738,29 @@ ZeroRAM:
     jr nz, -
     ret
 
-_LABEL_925_:
-    ld bc, _DATA_1D09_
+ShowSearchMemoryText:
+    ld bc, Text_SearchMemory
     ld de, 10*32 ; $0140 ; 10 rows
-    ld hl, $798C ; 6, 6
+    LD_HL_Tilemap 6, 6
     call ZeroVRAM
-    ld hl, $7A8C ; 6, 10
+    LD_HL_Tilemap 6, 10
     call EmitText
     ret
 
 BlankScreenWithTitle:
     ; Blank screen
     ld de, 11*32 ; $0160 ; 11 rows
-    ld hl, $794C ; 6, 5
+    LD_HL_Tilemap 6, 5
     call ZeroVRAM
     ; Show title
-    ld hl, $794C ; 6, 8
+    LD_HL_Tilemap 6, 5
     call EmitText ; Title
     ret
 
 DrawTwoPartTextScreen:
 ; bc points at the title text, followed by the description text
     call BlankScreenWithTitle
-    ld hl, $79CC ; 6, 7
+    LD_HL_Tilemap 6, 7
     call EmitText ; Body
     ret
 
@@ -1685,7 +1770,7 @@ DrawTwoPartTextScreen2:
     push de
       call BlankScreenWithTitle
     pop bc
-    ld hl, $79CC ; 6, 7
+    LD_HL_Tilemap 6, 7
     call EmitText
     ret
 
@@ -1869,7 +1954,7 @@ EditHexData_LivesScannerUpdate:
 .db $01
 .db $09
 .db $90
-.dw _LABEL_201_
+.dw Menu_LivesScannerUpdate_PostEdit
 
 Text_TimerScanner:
 .asc " ---TIMER SCANER--- ", EOS
@@ -1914,7 +1999,7 @@ Text_EnergyScanner:
 .asc "ENERGY BAR SHOULD   ", LINE_BREAK
 .asc "START IN FULL POWER ", EOS
 
-_DATA_1621_:
+SelectionMenuData_EnergyScanner:
 .db 2
 .dw $026A, Menu_MainMenu
 
@@ -1929,8 +2014,9 @@ Text_EnergyScannerUpdate:
 .asc "BETWEEN START VALUE ", LINE_BREAK
 .asc "AND CURRENT VALUE   ", EOS
 
-_DATA_16E3_:
-.db $05 $84 $02 $88 $02 $8C $02 $90 $02 $80 $01
+SelectionMenuData_EnergyScannerUpdate:
+.db 5 
+.dw _LABEL_284_, _LABEL_288_, _LABEL_28C_, _LABEL_290_, Menu_ScannerMenu
 
 Text_PowerScanner:
 .asc " ---POWER SCANER--- ", EOS
@@ -1944,8 +2030,9 @@ Text_PowerScanner:
 .asc "USE THIS METHOD FOR ", LINE_BREAK
 .asc "POWER BAR OR ETC    ", EOS
 
-_DATA_17C0_:
-.db $02 $A0 $02 $65 $01
+SelectionMenuData_PowerScanner:
+.db 2 
+.dw _LABEL_2A0_, Menu_MainMenu
 
 Text_PowerScannerUpdate:
 .asc "  SAME AS START     ", LINE_BREAK
@@ -1958,9 +2045,9 @@ Text_PowerScannerUpdate:
 .asc "BETWEEN START VALUE ", LINE_BREAK
 .asc "AND CURRENT VALUE   ", EOS
 
-_DATA_1882_:
+SelectionMenuData_PowerScannerUpdate:
 .db 4
-.dw _LABEL_2BA_, _LABEL_2BE_, _LABEL_2C2_, LABEL_180_
+.dw _LABEL_2BA_, _LABEL_2BE_, _LABEL_2C2_, Menu_ScannerMenu
 
 Text_StatusScanner:
 .asc " --STATUS  SCANER-- ", EOS
@@ -1974,9 +2061,9 @@ Text_StatusScanner:
 .asc "USE THIS METHOD FOR ", LINE_BREAK
 .asc "OPTION OR WEAPON ETC", EOS
 
-_DATA_195D_:
+SelectionMenuData_StatusScanner:
 .db 2 
-.dw _LABEL_2D9_, $165;_LABEL_165
+.dw _LABEL_2D9_, Menu_MainMenu
 
 Text_StatusScannerUpdate:
 .asc "  SAME AS START     ", LINE_BREAK
@@ -1989,9 +2076,9 @@ Text_StatusScannerUpdate:
 .asc "BETWEEN START STATUS", LINE_BREAK
 .asc "AND CURRENT STATUS  ", EOS
 
-_DATA_1A1F_:
+SelectionMenuData_StatusScannerUpdate:
 .db 3 
-.dw _LABEL_2F3_ _LABEL_2F7_ LABEL_180_
+.dw _LABEL_2F3_, _LABEL_2F7_, Menu_ScannerMenu
 
 Text_OtherPossibility:
 .asc " OTHER  POSSIBILITY ", EOS
@@ -2005,7 +2092,7 @@ Text_OtherPossibility:
 .asc "ALL OTHER METHOD    ", LINE_BREAK
 .asc "FAILED              ", EOS
 
-_DATA_1AF8_:
+SelectionMenuData_OtherPossibility:
 .db 2
 .dw _LABEL_307_, Menu_MainMenu
 
@@ -2020,9 +2107,9 @@ Text_OtherPossibilityUpdate:
 .asc "BETWEEN START STATUS", LINE_BREAK
 .asc "AND CURRENT STATUS  ", EOS
 
-_DATA_1BBA_:
+SelectionMenuData_OtherPossibilityUpdate:
 .db 3 
-.dw _LABEL_321_, _LABEL_325_, LABEL_180_
+.dw _LABEL_321_, _LABEL_325_, Menu_ScannerMenu
 
 Text_ScannerMenu:
 .asc " ---SCANER  MENU--- ", EOS
@@ -2031,38 +2118,39 @@ Text_ScannerMenu:
 .asc "  CLEAR MEMORY      ", LINE_BREAK
 .asc "  POSSIBLE CODES    ", EOS
 
-_DATA_1C2A_:
+SelectionMenuData_ScannerMenu:
 .db 4 
 .dw _LABEL_329_, $19C, LABEL_157_, _LABEL_332_
 
-_DATA_1C33_:
+Text_ParametersList:
 .asc " -PARAMETERS  LIST- ", EOS
 
-_DATA_1C48_:
-.db $08 $06 $AC $03
+ParametersListData:
+.db 8, 6 ; 8x6 hex
+.dw _LABEL_3AC_
 
-_DATA_1C4C_:
+Text_NothingValid:
 .asc "  THERE IS NOTHING  ", LINE_BREAK
 .asc "  VAILD NOW         ", EOS
 
-_DATA_1C76_:
+Text_ForOtherPossibilities:
 .asc "  FOR OTHER         ", LINE_BREAK
 .asc "  POSSIBLITIES      ", LINE_BREAK
 .asc "  PLEASE CHOOSE     ", LINE_BREAK
 .asc "  OTHER TYPE OF     ", LINE_BREAK
 .asc "  AUTO CODE SCANNER ", EOS
 
-_DATA_1CDF_:
+Text_PleaseContinue:
 .asc "  PLEASE CONTINUE   ", LINE_BREAK
 .asc "  THE SCANNER       ", EOS
 
-_DATA_1D09_:
+Text_SearchMemory:
 .asc "    SEARCH MEMORY   ", LINE_BREAK
 .asc "     PLEASE WAIT    ", EOS
 
-_DATA_1D33:
+Text_SwitchToScannerMode: ; Unused?
 .asc "   TURN SWITCH TO   ", LINE_BREAK
 .asc "    SCANER  MODE    ", EOS
 
-_DATA_1D5D:
-.db $4E $05 $66 $05 $E4 $05 $7A $05 $96 $05 $A0 $05
+SearchUpdateFunctions:
+.dw SearchUpdate_Lives, SearchUpdate_Timer, SearchUpdate_Energy, SearchUpdate_Power, SearchUpdate_Status, SearchUpdate_Other
