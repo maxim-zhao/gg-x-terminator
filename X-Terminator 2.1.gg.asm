@@ -458,12 +458,6 @@ Menu_TimerScannerUpdate_PostEdit:
     or ScannerMode_Timer
     jr SearchUpdatePreparationDone
 
-Menu_EnergyScanner:
-    ld bc, Text_EnergyScanner
-    call DrawTwoPartTextScreen
-    ld hl, SelectionMenuData_EnergyScanner
-    jp ShowSelectionMenu_FirstItemActive
-
 ; "Energy" mode
 ; This is similar to "Timer" mode except the deltas are fuzzy: the user selects if 
 ; the current value is "about" the same, 75%, 50% or 25% of the initial value.
@@ -471,32 +465,43 @@ Menu_EnergyScanner:
 ; to infer the "initial value" for new addresses reached by subsequent iterations.
 
 Menu_EnergyScanner:
-    ld a, ScannerMode_Energy
-    call PerformInitialSearch
-    ld hl, Menu_EnergyScanner_PostEdit
-    jp SetScannerActive
+    ld bc, Text_EnergyScanner
+    call DrawTwoPartTextScreen
+    ld hl, SelectionMenuData_EnergyScanner
+    jp ShowSelectionMenu_FirstItemActive
 
 Menu_EnergyScanner_PostEdit:
+    ld a, ScannerMode_Energy
+    call PerformInitialSearch
+    ld hl, Menu_EnergyScannerUpdate
+    jp SetScannerActive
+
+Menu_EnergyScannerUpdate:
     ld bc, Text_EnergyScanner
     ld de, Text_EnergyScannerUpdate
     call DrawTwoPartTextScreen2
     ld hl, SelectionMenuData_EnergyScannerUpdate
     jp ShowSelectionMenu_FirstItemActive 
 
+.define ScannerMode_Energy_100 ScannerMode_Energy | $00
+.define ScannerMode_Energy_75 ScannerMode_Energy | $60
+.define ScannerMode_Energy_50 ScannerMode_Energy | $a0
+.define ScannerMode_Energy_25 ScannerMode_Energy | $c0
+
 EnergyScanner_100:
-    ld a, ScannerMode_Energy | $00
+    ld a, ScannerMode_Energy_100
     jr SearchUpdatePreparationDone
 
 EnergyScanner_75:
-    ld a, ScannerMode_Energy | $60
+    ld a, ScannerMode_Energy_75
     jr SearchUpdatePreparationDone
 
 EnergyScanner_50:
-    ld ScannerMode_Energy | $a0
+    ld a, ScannerMode_Energy_50
     jr SearchUpdatePreparationDone
 
 EnergyScanner_25:
-    ld a, ScannerMode_Energy | $c0
+    ld a, ScannerMode_Energy_25
     jr SearchUpdatePreparationDone
 
 ; "Power" mode
@@ -962,12 +967,17 @@ _GetHighNibble:
     and $0F
     ret
 
-_LABEL_502_:
+_ComputeFractions:
+; a = value x to scale
+; Returns
+; - l = 0.25x
+; - h = 0.5x
+; - a = 0.75x
     srl a
-    ld h, a
+    ld h, a ; h = 0.5a
     srl a
-    ld l, a
-    add a, h
+    ld l, a ; l = 0.25a
+    add a, h ; a = 3a/4
     ret
 
 PerformSearchUpdate:
@@ -1156,24 +1166,24 @@ SaveMatchCacheEndPointer:
 SearchUpdate_Energy:
         ; a is _RAM_208C_ScannerMode, low nibble is ScannerMode_Energy, high nibble is 0, 6, a, c for 100%, 75%, 50%, 25% respectively
         ; d is the MatchData field for previous matches
+        ; c is the candidate value
         cp d
         jr z, _LABEL_5A9_
-        cp ScannerMode_Energy | $00
-        jr z, _LABEL_638_
-        cp ScannerMode_Energy | $60
-        jr z, +++
-        cp ScannerMode_Energy | $c0
-        jr z, ++
-        ; ScannerMode_Energy | $a0 = 50% mode
+        cp ScannerMode_Energy_100
+        jr z, _About100
+        cp ScannerMode_Energy_75
+        jr z, _About75
+        cp ScannerMode_Energy_25
+        jr z, _About25
+        ; ScannerMode_Energy_50
 _About50:
+        ; New value is 50% of start
         ld a, d
-        cp ScannerMode_Energy | $00
+        cp ScannerMode_Energy_100
         jr z, +
-        jr _KeepMatch
-
-+:
-        ld a, e
-        call _LABEL_502_
+        jr _KeepMatch ; Keep any that aren't
++:      ld a, e
+        call _ComputeFractions
         ld h, a
         ld a, c
 _LABEL_600_:
@@ -1181,72 +1191,64 @@ _LABEL_600_:
         jr c, _DiscardMatch
         jr z, _DiscardMatch
 _LABEL_605_:
-    cp h
-    jr c, _KeepMatch
-    jr _DiscardMatch
+        cp h
+        jr c, _KeepMatch
+        jr _DiscardMatch
 
-++:
-    ld a, d
-    cp $04
-    jr z, ++
-    cp $64
-    jr z, +
-    jr _KeepMatch
+_About25:
+        ld a, d
+        cp $04
+        jr z, ++
+        cp $64
+        jr z, +
+        jr _KeepMatch
++:      ld a, c
+        ld h, e
+        jr _LABEL_605_
+++:     ld a, e
+        call _ComputeFractions
+        ld a, c
+        jr _LABEL_605_
 
-+:
-    ld a, c
-    ld h, e
-    jr _LABEL_605_
+_About75:
+        ld a, d
+        cp $04
+        jr z, ++
+        cp $C4
+        jr z, +
+        jr _KeepMatch
++:      ld a, e
+        ld h, c
+        jr _LABEL_605_
+++:     ld a, e
+        call _ComputeFractions
+        ld a, c
+        ld l, h
+        ld h, e
+        jr _LABEL_600_
 
-++:
-    ld a, e
-    call _LABEL_502_
-    ld a, c
-    jr _LABEL_605_
+_About100:
+        ; Compute fractions
+        ld a, c
+        call _ComputeFractions
+        ld b, a
+        ; Check the match's type
+        ld a, d
+        cp $64 ; 75%
+        jr z, ++
+        cp $A4 ; 50%
+        jr z, +
+        ; 25%?
+        ld a, e ; Previous match value
+        jr _LABEL_605_
++:      ld a, e
+        ld h, b
+        jr _LABEL_600_
+++:     ld a, e
+        ld l, h
+        ld h, c
+        jr _LABEL_600_
 
-+++:
-    ld a, d
-    cp $04
-    jr z, ++
-    cp $C4
-    jr z, +
-    jr _KeepMatch
-
-+:
-    ld a, e
-    ld h, c
-    jr _LABEL_605_
-
-++:
-    ld a, e
-    call _LABEL_502_
-    ld a, c
-    ld l, h
-    ld h, e
-    jr _LABEL_600_
-
-_LABEL_638_:
-    ld a, c
-    call _LABEL_502_
-    ld b, a
-    ld a, d
-    cp $64
-    jr z, ++
-    cp $A4
-    jr z, +
-    ld a, e
-    jr _LABEL_605_
-
-+:
-    ld a, e
-    ld h, b
-    jr _LABEL_600_
-
-++:
-    ld a, e
-    ld l, h
-    ld h, c
-    jr _LABEL_600_
 
 ShowSelectionMenu_FirstItemActive:
     ld a, 1
