@@ -463,6 +463,16 @@ Menu_TimerScannerUpdate_PostEdit:
 ; the current value is "about" the same, 75%, 50% or 25% of the initial value.
 ; This will work best if the values are close to these percentages as they are used
 ; to infer the "initial value" for new addresses reached by subsequent iterations.
+; Values captured at the 100% stage are the best because we can easily compute
+; 25%, 50% and 75% thresholds for them. An update check will pass a value if it lies 
+; between the thresholds either side, e.g. "about 50%" means 25% < x < 75%.
+; Values captured at other levels (in subsequent iterations as RAM becomes available) 
+; are harder to deal with because they are "fuzzy" - we don't trust that we know their
+; 100% value. Thus the thresholds are widened one stage more, e.g. to pass at the 25% 
+; level the current value need only be less than an earlier 75% threshold level; captures
+; at 25% or 50% cannot be compared.
+; This means that to get a good result, you need to perform iterations at all levels
+; repeatedly to allow weeding out those captured with "fuzzy" values.
 
 Menu_EnergyScanner:
     ld bc, Text_EnergyScanner
@@ -967,7 +977,7 @@ _GetHighNibble:
     and $0F
     ret
 
-_ComputeFractions:
+_ComputeFractionsToLHA:
 ; a = value x to scale
 ; Returns
 ; - l = 0.25x
@@ -1181,73 +1191,87 @@ _About50:
         ld a, d
         cp ScannerMode_Energy_100
         jr z, +
-        jr _KeepMatch ; Keep any that aren't
-+:      ld a, e
-        call _ComputeFractions
-        ld h, a
+        jr _KeepMatch ; Keep any that weren't captured at 100% - we don't even try to capture them
++:      ; Compute 25%, 75% levels of captured value
+        ld a, e
+        call _ComputeFractionsToLHA
+        ld h, a ; now we want l < c < h
+        ; Compare current value
         ld a, c
-_LABEL_600_:
-        cp l
+_CheckBetweenLAndH:
+        cp l ; Check for > lower limit
         jr c, _DiscardMatch
         jr z, _DiscardMatch
-_LABEL_605_:
+_CheckBelowH:
         cp h
         jr c, _KeepMatch
         jr _DiscardMatch
 
 _About25:
+        ; New value is ~25% of start
         ld a, d
-        cp $04
+        cp ScannerMode_Energy_100
         jr z, ++
-        cp $64
+        cp ScannerMode_Energy_75
         jr z, +
+        ; Keep any that were captured at 25%, 50%
         jr _KeepMatch
-+:      ld a, c
-        ld h, e
-        jr _LABEL_605_
-++:     ld a, e
-        call _ComputeFractions
++:      ; Captured was at ~75%, check for < that
+        ; (Since the reference is fuzzy, it is given more margin)
         ld a, c
-        jr _LABEL_605_
+        ld h, e
+        jr _CheckBelowH
+++:     ; Captured was at 100%, check for < 50% of that
+        ld a, e
+        call _ComputeFractionsToLHA
+        ld a, c
+        jr _CheckBelowH
 
 _About75:
+        ; New value is ~75% of start
         ld a, d
-        cp $04
+        cp ScannerMode_Energy_100
         jr z, ++
-        cp $C4
+        cp ScannerMode_Energy_25
         jr z, +
+        ; Keep any captured at 50%, 75%
         jr _KeepMatch
-+:      ld a, e
++:      ; Captured was at ~25%, check for > that
+        ld a, e
         ld h, c
-        jr _LABEL_605_
-++:     ld a, e
-        call _ComputeFractions
+        jr _CheckBelowH
+++:     ; Captured was at 100%, check for > 50% and < 100% of that
+        ld a, e
+        call _ComputeFractionsToLHA
         ld a, c
         ld l, h
         ld h, e
-        jr _LABEL_600_
+        jr _CheckBetweenLAndH
 
 _About100:
-        ; Compute fractions
+        ; Compute fractions of the candidate value
         ld a, c
-        call _ComputeFractions
+        call _ComputeFractionsToLHA
         ld b, a
         ; Check the match's type
         ld a, d
-        cp $64 ; 75%
+        cp ScannerMode_Energy_75
         jr z, ++
-        cp $A4 ; 50%
+        cp ScannerMode_Energy_50
         jr z, +
-        ; 25%?
-        ld a, e ; Previous match value
-        jr _LABEL_605_
-+:      ld a, e
+        ; ScannerMode_Energy_25
+        ; Captured was at ~25%, check 50% of our new value is greater than it
+        ld a, e
+        jr _CheckBelowH
++:      ; Captured was at ~50%, check 75% of our new value is greater than it
+        ld a, e
         ld h, b
-        jr _LABEL_600_
-++:     ld a, e
+        jr _CheckBetweenLAndH
+++:     ; Captured was at ~75%, check 50% of our new value is lower than it, and our original value was bigger
+        ld a, e
         ld l, h
         ld h, c
-        jr _LABEL_600_
+        jr _CheckBetweenLAndH
 
 
 ShowSelectionMenu_FirstItemActive:
