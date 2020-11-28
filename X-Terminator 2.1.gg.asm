@@ -559,6 +559,12 @@ SearchUpdatePreparationDone:
     call PerformSearchUpdate
     call CheckForIncompleteSearch
     jp Menu_ScannerMenu
+    
+; "Status" mode
+; This searches for byte values that are the same or "opposite" to the start value.
+; This assumes that a single byte is used to store the value with inverted bits to
+; represent the "opposite" state.
+; This will work well for flags stored as $00/$ff but not much else.
 
 Menu_StatusScanner:
     ld bc, Text_StatusScanner
@@ -579,13 +585,25 @@ Menu_StatusScannerUpdate:
     ld hl, SelectionMenuData_StatusScannerUpdate
     jp ShowSelectionMenu_FirstItemActive
 
+.define ScannerMode_Status_Same ScannerMode_Status | $00
+.define ScannerMode_Status_Opposite ScannerMode_Status | $40
+
 StatusScanner_Same:
-    ld a, $08
+    ld a, ScannerMode_Status_Same
     jr SearchUpdatePreparationDone
 
 StatusScanner_Opposite:
-    ld a, $48
+    ld a, ScannerMode_Status_Opposite
     jr SearchUpdatePreparationDone
+
+; "Other possibility" mode
+; This searches for values that are either the same as the start value or different.
+; The values stored are always in one sense or the other; the comparisons are then
+;   Current | Stored
+;           | Same  | Different
+; ----------+-------+----------
+;      Same | =     | !=
+; Different | !=    | Unknowable
 
 Menu_OtherPossibilityScanner:
     ld bc, Text_OtherPossibility
@@ -606,13 +624,18 @@ Menu_OtherPossibilityScannerUpdate:
     ld hl, SelectionMenuData_OtherPossibilityUpdate
     jp ShowSelectionMenu_FirstItemActive
 
+.define ScannerMode_Other_Same ScannerMode_Other | $00
+.define ScannerMode_Other_Different ScannerMode_Other | $40
+
 OtherPossibility_Same:
-    ld a, $0A
+    ld a, ScannerMode_Other_Same
     jr SearchUpdatePreparationDone
 
 OtherPossibility_Different:
-    ld a, $4A
+    ld a, ScannerMode_Other_Different
     jr SearchUpdatePreparationDone
+
+
 
 ContinueScanner:
     ld a, (_RAM_2092_NextScannerMenu.Lo)
@@ -1124,17 +1147,22 @@ _Smaller:
         jr _DiscardMatch
 
 SearchUpdate_Status:
+        ; If the mode is the same as the stored value, we check for equality.
+        ; Otherwise, we invert all the bits in e.
         cp d
         jr z, +
         ld a, $FF
         xor e
         ld e, a
-+:      xor a
++:      xor a ; High nibble is zero so this is just an equality check
         jr KeepIfHighNibbleNonZeroOrValueEqual
 
 SearchUpdate_Other:
+        ; Values stored as Same and current is Same can be compared.
+        ; Values stored as Different and current is Different can't be compared.
         cp d
         jr z, KeepIfHighNibbleNonZeroOrValueEqual
+        ; Values stored in the opposite sense to each other must not be equal.
         ld a, c
         cp e
         jr z, _DiscardMatch
