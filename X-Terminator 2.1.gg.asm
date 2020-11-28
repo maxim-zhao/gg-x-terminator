@@ -22,11 +22,11 @@
 .define SAVE_RAM_DISABLE $00
 
 .asciitable
-  ; English font is mostly ASCII with some missing and some arrows...
-  ; ASCII:  !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
-  ; Font:   !   % '←→*+,-./0123456789  < >  ABCDEFGHIJKLMNOPQRSTUVWXYZ[→]↑↓
-  ; This is enough for us to map it
-  map ' ' = $20
+    ; English font is mostly ASCII with some missing and some arrows...
+    ; ASCII:  !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
+    ; Font:   !   % '←→*+,-./0123456789  < >  ABCDEFGHIJKLMNOPQRSTUVWXYZ[→]↑↓
+    ; This is enough for us to map it
+    map ' ' = $20
 .enda
 
 ; The format of the codes and internal state
@@ -43,49 +43,47 @@
 .endst
 
 .enum 0 ; all are multiples of 2 so dw...
-  ScannerMode_Lives dw
-  ScannerMode_Timer dw
-  ScannerMode_Energy dw
-  ScannerMode_Power dw
-  ScannerMode_Status dw
-  ScannerMode_Other dw
+    ScannerMode_Lives dw
+    ScannerMode_Timer dw
+    ScannerMode_Energy dw
+    ScannerMode_Power dw
+    ScannerMode_Status dw
+    ScannerMode_Other dw
 .ende
 
 .enum DEVICE_RAM_START export ; Device RAM
-    Stack   dsb 128 ; 0-7f = stack
-    _RAM_2080_CurrentItemDigit db
-    _RAM_2081_CurrentItemRowIndex db
-    _RAM_2082_HexDigitsPerRow db
-    _RAM_2083_RowCount db
-    _RAM_2084_NameTableLocation instanceof Word
-    _RAM_2086_NameTableLocationBase instanceof Word
-    _RAM_2088_DataLocation instanceof Word
-    _RAM_208A_LowNibbleMaxValue db
-    _RAM_208B_HighNibbleMaxValue db
-    _RAM_208C_ScannerMode db ; 0 = lives, 2 = timer, 4 = energy, 6 = power, 8 = status, 10 = other
-    _RAM_208D_Sign db
-    _RAM_208E_SignedMode db
-    _RAM_208F_ScannerActive db
-    _RAM_2090_MatchCacheEndPointer instanceof Word
-    _RAM_2092_NextScannerMenu instanceof Word
-    _RAM_2094_MatchCacheWritePointer instanceof Word
-    _RAM_2096 db
-    _RAM_2097 db
-    _RAM_2098_BytesRemainingToSearch instanceof Word
-    _RAM_209A_NextAddressForSearch instanceof Word
-    _RAM_209C_IncompleteSearch db
-    _RAM_209D db
-    _RAM_209E_TimerDelta db
-    _RAM_209F db
-    CheatCodes instanceof CheatCode 6
-.ende
-
-.enum $20c0 export
-  _RAM_20c0_SearchCandidates dsb 6 ; Search value in hex, BCD, then both as n-1 and n+1
-.ende
-
-.enum $2100 export
-  _RAM_2100_MatchCache instanceof CheatCode $7c0 ; Holds info on matches - 4 bytes per entry, goes up to $4000
+    RAM_Stack                   dsb 128 ; 0-7f = stack
+    RAM_StartOfDeviceMemory     .db
+    RAM_CurrentItemDigit        db
+    RAM_CurrentItemRowIndex     db
+    RAM_HexDigitsPerRow         db
+    RAM_RowCount                db
+    RAM_NameTableLocation       instanceof Word
+    RAM_NameTableLocationBase   instanceof Word
+    RAM_DataLocation            instanceof Word
+    RAM_LowNibbleMaxValue       db
+    RAM_HighNibbleMaxValue      db
+    RAM_ScannerMode             db ; see enum above, other bits are used for options/state
+    RAM_SelectedCodes           .db ; shared with following
+    RAM_Sign                    db
+    RAM_ToggleMode              .db ; shared with following
+    RAM_SignedMode              db
+    RAM_ScannerActive           db
+    RAM_MatchCacheEndPointer    instanceof Word
+    RAM_NextScannerMenu         instanceof Word
+    RAM_MatchCacheWritePointer  instanceof Word
+    RAM_unused2096              dw ; Unused
+    RAM_BytesRemainingToSearch  instanceof Word
+    RAM_NextAddressForSearch    instanceof Word
+    RAM_IncompleteSearch        db
+    RAM_ScannerMemoryCleared    db
+    RAM_TimerDelta              db
+    RAM_unused209f              db ; Unused
+    RAM_CheatCodes              instanceof CheatCode 6
+    RAM_unused20b8              dsb 8 ; Unused
+    RAM_LivesSearchCandidates   dsb 6 ; Search value in hex, BCD, then both as n-1 and n+1
+    RAM_unused20c6              dsb 58  ; Unused
+    RAM_MatchCache instanceof CheatCode $7c0 ; Holds info on matches - 4 bytes per entry, goes up to $4000
 .ende
 
 ; Ports
@@ -153,23 +151,23 @@ InterruptHandlerImpl:
       jp 0 ; Reset to the menu
 
 +:    ; Apply cheat codes
-      ld a, (CheatCodes.1.Value)
-      ld hl, (CheatCodes.1.Address)
+      ld a, (RAM_CheatCodes.1.Value)
+      ld hl, (RAM_CheatCodes.1.Address)
       ld (hl), a
-      ld a, (CheatCodes.2.Value)
-      ld hl, (CheatCodes.2.Address)
+      ld a, (RAM_CheatCodes.2.Value)
+      ld hl, (RAM_CheatCodes.2.Address)
       ld (hl), a
-      ld a, (CheatCodes.3.Value)
-      ld hl, (CheatCodes.3.Address)
+      ld a, (RAM_CheatCodes.3.Value)
+      ld hl, (RAM_CheatCodes.3.Address)
       ld (hl), a
-      ld a, (CheatCodes.4.Value)
-      ld hl, (CheatCodes.4.Address)
+      ld a, (RAM_CheatCodes.4.Value)
+      ld hl, (RAM_CheatCodes.4.Address)
       ld (hl), a
-      ld a, (CheatCodes.5.Value)
-      ld hl, (CheatCodes.5.Address)
+      ld a, (RAM_CheatCodes.5.Value)
+      ld hl, (RAM_CheatCodes.5.Address)
       ld (hl), a
-      ld a, (CheatCodes.6.Value)
-      ld hl, (CheatCodes.6.Address)
+      ld a, (RAM_CheatCodes.6.Value)
+      ld hl, (RAM_CheatCodes.6.Address)
       ld (hl), a
     pop hl
     pop af
@@ -182,7 +180,7 @@ InterruptHandlerImpl:
 
 Boot:
     ; Put stack in cheat device RAM
-    ld sp, Stack + _sizeof_Stack - 1
+    ld sp, RAM_Stack + _sizeof_RAM_Stack - 1
 
     ; Mute PSG
     LD_BC 4, Port_PSG
@@ -261,31 +259,35 @@ Boot:
     LD_HL_Tilemap 6, 17
     call EmitText
 
-    ; If not 1, use second set of values
-    ld a, (_RAM_209D)
+    ; Clear scanner memory if not already done
+    ld a, (RAM_ScannerMemoryCleared)
     cp 1
-    jr nz, +
+    jr nz, ClearMemory
 
-    ld a, (_RAM_208F_ScannerActive)
+    ; Else check if a scanner is active
+    ld a, (RAM_ScannerActive)
     cp 1
-    jr z, +++
+    jr z, _ScannerActive
     
-    ; Values 1
-    ld de, $2000 - $c0
-    ld hl, _RAM_20c0_SearchCandidates
-    jr ++
+    ; Else we are returning to the menu in non-scanner mode.
+    ; This code was probably intending to clear the scanner memory but it does not...
+    ; ...the value are discarded and would not work properly anyway
+    ld de, DEVICE_RAM_SIZE - (RAM_LivesSearchCandidates - DEVICE_RAM_START)
+    ld hl, RAM_LivesSearchCandidates
+    jr Menu_MainMenu
 
-    ; Values 2
-ClearScannerMemory:
-+:  ld de, $2000 - $80
-    ld hl, _RAM_2080_CurrentItemDigit
+    ; This happens on (first) startup and if selected in the menu
+ClearMemory:
++:  ld de, DEVICE_RAM_SIZE - (RAM_StartOfDeviceMemory - DEVICE_RAM_START)
+    ld hl, RAM_StartOfDeviceMemory
     call ZeroRAM
 
-    ld a, $01
-    ld (_RAM_209D), a
+    ld a, 1
+    ld (RAM_ScannerMemoryCleared), a
+    ; fall through
 
-Menu_MainMenu: ; $0165
-++: ld bc, Text_MainMenu
+Menu_MainMenu:
+    ld bc, Text_MainMenu
     call DrawTwoPartTextScreen
 
     ld hl, SelectionMenuData_MainMenu
@@ -295,17 +297,17 @@ Menu_MainMenu: ; $0165
 SetScannerActive:
 ; hl = menu for next scanner action
     ld a, 1
-    ld (_RAM_208F_ScannerActive), a
+    ld (RAM_ScannerActive), a
     ld a, l
-    ld (_RAM_2092_NextScannerMenu.Lo), a
+    ld (RAM_NextScannerMenu.Lo), a
     ld a, h
-    ld (_RAM_2092_NextScannerMenu.Hi), a
+    ld (RAM_NextScannerMenu.Hi), a
     ; fall through
     
 Menu_ScannerMenu:
     ld a, 2 ; Enter Codes selected
 
-+++:
+_ScannerActive:
     push af
       ld bc, Text_ScannerMenu
       call DrawTwoPartTextScreen
@@ -326,7 +328,7 @@ Menu_EnterCodes:
     call DrawTwoPartTextScreen
     ld hl, EditHexData_EnterCodes
     LD_DE_Tilemap 16. 7
-    ld bc, CheatCodes 
+    ld bc, RAM_CheatCodes 
     jp EditHex
 
 Menu_EnterCodes_PostEdit:
@@ -398,7 +400,7 @@ Menu_LivesScannerUpdate:
     call DrawTwoPartTextScreen2
     ld hl, EditHexData_LivesScannerUpdate
 +:  LD_DE_Tilemap 15, 7
-    ld bc, _RAM_20c0_SearchCandidates
+    ld bc, RAM_LivesSearchCandidates
     jp EditHex
 
 Menu_LivesScannerUpdate_PostEdit:
@@ -410,7 +412,7 @@ Menu_LivesScannerUpdate_PostEdit:
     
 ; "Timer" mode
 ; This searches for byte values which change by a delta -9..+9 known to the user, in BCD.
-; _RAM_208C_ScannerMode stores the sign in the least significant bit and the magnitude
+; RAM_ScannerMode stores the sign in the least significant bit and the magnitude
 ; in the upper 4 bits.
 ; It has to store state for every byte for at least one iteration so it may take 9 iterations
 ; to even reach the last possibilities.
@@ -437,19 +439,19 @@ Menu_TimerScannerUpdate:
     ld a, '+'
     call WriteAToVDPAs16Bit
     xor a
-    ld (_RAM_208D_Sign), a
+    ld (RAM_Sign), a
     ld a, 1
-    ld (_RAM_208E_SignedMode), a
+    ld (RAM_SignedMode), a
     ld hl, EditHexData_TimerScanner 
     LD_DE_Tilemap 15, 7
-    ld bc, _RAM_209E_TimerDelta
+    ld bc, RAM_TimerDelta
     jp EditHex
 
 Menu_TimerScannerUpdate_PostEdit:
     ; Combine the delta info into a single byte
-    ld a, (_RAM_208D_Sign) ; In bit 4?
+    ld a, (RAM_Sign) ; In bit 4
     ld c, a
-    ld a, (_RAM_209E_TimerDelta)
+    ld a, (RAM_TimerDelta)
     or c
     rrca
     rrca
@@ -635,67 +637,81 @@ OtherPossibility_Different:
     ld a, ScannerMode_Other_Different
     jr SearchUpdatePreparationDone
 
-
-
 ContinueScanner:
-    ld a, (_RAM_2092_NextScannerMenu.Lo)
+; This is hooked up to varioud "continue scanner" menus. It just jumps to the stored
+; menu handler.
+    ld a, (RAM_NextScannerMenu.Lo)
     ld l, a
-    ld a, (_RAM_2092_NextScannerMenu.Hi)
+    ld a, (RAM_NextScannerMenu.Hi)
     ld h, a
     jp (hl)
 
 Menu_ListCurrentCandidates:
+    ; Draw the header
     ld bc, Text_ParametersList
     call BlankScreenWithTitle
+    ; Get the dimensions (8 hex digits x 6 rows max)
     ld hl, ParametersListData
     ld a, (hl)
     inc hl
-    ld (_RAM_2082_HexDigitsPerRow), a
+    ld (RAM_HexDigitsPerRow), a
     ld a, (hl)
     inc hl
+    ; Check if we have that many rows.
     push hl
-    ld l, a
-    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
-    cp $21
-    jr nz, +
-    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
-    or a
-    jr z, ++
-    cp $18
-    jr nc, +
-    rrca
-    rrca
-    ld l, a
-+:
-    ld a, l
-    ld (_RAM_2083_RowCount), a
-    xor a
-    ld (_RAM_2084_NameTableLocation.Hi), a
-    LD_HL_Tilemap 9, 7
-    ld de, _RAM_2100_MatchCache
-    call _LABEL_8AB_PrintHex
-    xor a
-    ld (_RAM_208D_Sign), a
-    inc a
-    ld (_RAM_208E_SignedMode), a
-    ld (_RAM_2081_CurrentItemRowIndex), a
-    jp _UpdateArrow
+      ld l, a
+      ; Compare RAM_MatchCacheEndPointer to RAM_MatchCache.7
+      ld a, (RAM_MatchCacheEndPointer.Hi)
+      cp >RAM_MatchCache.7
+      jr nz, +
+      ld a, (RAM_MatchCacheEndPointer.Lo)
+      or a
+      jr z, _MatchCacheEmpty
+      cp <RAM_MatchCache.7
+      jr nc, +
+      ; It is below RAM_MatchCache.7. We divide it by 4 to get the count
+      ; as RAM_MatchCache is 256-aligned and the entries are 4 bytes each.
+      ; (Making it 4-aligned would allow better RAM usage and marginally improve
+      ; search performance.)
+      rrca
+      rrca
+      ld l, a
++:    ld a, l
+      ld (RAM_RowCount), a
+      ; We make this an invalid location in order to not show any nibbles
+      ; as inverted when drawing them...
+      xor a
+      ld (RAM_NameTableLocation.Hi), a
+      ; Now draw them...
+      LD_HL_Tilemap 9, 7
+      ld de, RAM_MatchCache
+      call _LABEL_8AB_PrintHex
+      xor a
+      ld (RAM_SelectedCodes), a
+      inc a
+      ld (RAM_ToggleMode), a
+      ld (RAM_CurrentItemRowIndex), a
+      ; This jumps into the selection menu code so that a code may be selected.
+      ; This will then jump to ParametersListSubmitted.
+      jp _UpdateArrow
 
-++:
+_MatchCacheEmpty:
     pop hl
-    ld a, (_RAM_209C_IncompleteSearch)
+    ld a, (RAM_IncompleteSearch)
     or a
-    jr z, +
+    jr z, _SearchComplete
     ld bc, Text_PleaseContinue
-    call ++
+    call _ShowMessageNothingValid
     jp Menu_ScannerMenu
 
-+:
+_SearchComplete:
     ld bc, Text_ForOtherPossibilities
-    call ++
-    jp ClearScannerMemory
+    call _ShowMessageNothingValid
+    ; Reset the scanner state
+    jp ClearMemory
 
-++:
+_ShowMessageNothingValid:
+; bc = pointer to second part of text
     push bc
       ld bc, Text_NothingValid
       LD_HL_Tilemap 6, 7
@@ -710,65 +726,69 @@ Menu_ListCurrentCandidates:
     jr z, -
     ret
 
-_LABEL_3AC_:
-    ld hl, _RAM_2100_MatchCache
-    ld bc, CheatCodes
+ParametersListSubmitted:
+    ld hl, RAM_MatchCache
+    ld bc, RAM_CheatCodes
     ld d, 6 ; Maximum number of cheat codes
-    ld a, (_RAM_208D_Sign)
+    ; Find the selected ones
+    ld a, (RAM_SelectedCodes)
     ld e, a
----:
-    ld a, e
+-:  ld a, e
     rrca
     ld e, a
     push de
-      jr c, +
+      jr c, _Selected
+_NotSelected:
+      ; Move past it
       inc hl
       inc hl
       inc hl
       inc hl
---:
-    pop de
+--: pop de
     dec d
-    jr nz, ---
+    jr nz, -
     jp Menu_ScannerMenu
 
-+:
+_Selected:
+      ; Copy 4 bytes fromo hl to bc
       push hl
-        ld e, $04
--:
-        ld a, (hl)
+        ld e, 4
+-:      ld a, (hl)
         inc hl
         ld (bc), a
         inc bc
         dec e
         jr nz, -
+        ; get de = pointer to code in the cache
       pop de
       push de
--:
-        ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
+        ; Remove the code from the cache
+        ; If the pointer is now at the end then we just need to move the end pointer back
+-:      ld a, (RAM_MatchCacheEndPointer.Hi)
         cp h
-        jr nz, +
-        ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
+        jr nz, _CodeInMiddle
+        ld a, (RAM_MatchCacheEndPointer.Lo)
         cp l
-        jr z, ++
-+:
+        jr z, _CodeAtEnd
+_CodeInMiddle:
+        ; If in the middle of the cache then we copy one byte and loop.
         ld a, (hl)
         inc hl
         ld (de), a
         inc de
         jr -
-
-++:
+_CodeAtEnd:     
         ld a, e
-        ld (_RAM_2090_MatchCacheEndPointer.Lo), a
+        ld (RAM_MatchCacheEndPointer.Lo), a
         ld a, d
-        ld (_RAM_2090_MatchCacheEndPointer.Hi), a
+        ld (RAM_MatchCacheEndPointer.Hi), a
       pop hl
+      ; Technical note: it could be more efficient to do an ldir block copy here?
       jr --
 
 CalculateLivesSearchValues:
     ; Get search value
-    ld hl, _RAM_20c0_SearchCandidates
+    ld hl, RAM_LivesSearchCandidates
     ld a, (hl)
     inc hl
     ; Process raw value
@@ -808,27 +828,27 @@ _convertBCD:
 
 CheckForIncompleteSearch:
     ; Check the flag, return if complete
-    ld a, (_RAM_209C_IncompleteSearch)
+    ld a, (RAM_IncompleteSearch)
     or a
     ret z
     
     ; Clear the flag
     xor a
-    ld (_RAM_209C_IncompleteSearch), a
+    ld (RAM_IncompleteSearch), a
     
     ; Point at the end of the cache
-    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
-    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
-    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
-    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    ld a, (RAM_MatchCacheEndPointer.Lo)
+    ld (RAM_MatchCacheWritePointer.Lo), a
+    ld a, (RAM_MatchCacheEndPointer.Hi)
+    ld (RAM_MatchCacheWritePointer.Hi), a
     ; And at the point we had got to
-    ld a, (_RAM_2098_BytesRemainingToSearch.Lo)
+    ld a, (RAM_BytesRemainingToSearch.Lo)
     ld e, a
-    ld a, (_RAM_2098_BytesRemainingToSearch.Hi)
+    ld a, (RAM_BytesRemainingToSearch.Hi)
     ld d, a
-    ld a, (_RAM_209A_NextAddressForSearch.Lo)
+    ld a, (RAM_NextAddressForSearch.Lo)
     ld c, a
-    ld a, (_RAM_209A_NextAddressForSearch.Hi)
+    ld a, (RAM_NextAddressForSearch.Hi)
     ld b, a
     ; If bc is in cart ram it's in the range $8000-$9fff
     ; If it is in work RAM it's in the range $c000-$dfff
@@ -839,14 +859,14 @@ CheckForIncompleteSearch:
 
 PerformInitialSearch:
     ; a = mode
-    ld (_RAM_208C_ScannerMode), a
+    ld (RAM_ScannerMode), a
     
     call ShowSearchMemoryText
     
     xor a
-    ld (_RAM_2094_MatchCacheWritePointer), a
+    ld (RAM_MatchCacheWritePointer), a
     ld a, $21
-    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    ld (RAM_MatchCacheWritePointer.Hi), a
     
     ld bc, SAVE_RAM_START
     ; Save value
@@ -872,7 +892,7 @@ PerformInitialSearch:
     ld de, SAVE_RAM_SIZE ; search size
 _ResumeCartRAM:
     call _DoSearch
-    ld a, (_RAM_209C_IncompleteSearch)
+    ld a, (RAM_IncompleteSearch)
     or a
     jr nz, +
     ; Fall through if not done
@@ -893,16 +913,16 @@ _DoSearch:
       ld a, (bc)
       ld e, a
       ; Point at candidates bytes
-      ld hl, _RAM_20c0_SearchCandidates
+      ld hl, RAM_LivesSearchCandidates
       ; check mode
-      ld a, (_RAM_208C_ScannerMode)
+      ld a, (RAM_ScannerMode)
       ld d, a
       and $0E ; Scanner modes are all multiples of 2
       jr z, _Lives
       cp 2
       jr nz, ++ ; All others match on all memory addresses at first
 _Timer:
-      ; The low and high 4 bits of _RAM_208C_ScannerMode hold the delta from the start
+      ; The low and high 4 bits of RAM_ScannerMode hold the delta from the start
       ; value, and we want to apply that delta in order to store each candidate as its
       ; "initial" value. At the first iteration, this data says +0 so it does no harm to
       ; do it.
@@ -911,14 +931,14 @@ _Timer:
       bit 0, a
       jr z, +
       ; Low bit set: currnt is -n from start
-      call _GetHighNibble ; Of _RAM_208C_ScannerMode
+      call _GetHighNibble ; Of RAM_ScannerMode
       add a, e ; Add to candidate byte, in decimal
       daa
       ld e, a
       ; No comparison, just store it as a potential match 
       jr ++
 +:    ; Low bit unset
-      call _GetHighNibble ; Of _RAM_208C_ScannerMode
+      call _GetHighNibble ; Of RAM_ScannerMode
       ld l, a
       ld a, e
       sub l ; Subtract from candidate byte, in decimal
@@ -949,36 +969,36 @@ _Lives:
     or e
     ret z ; Return when done
     ; Wait got h = $40 which means we ran out of RAM to store it in
-    ; (hl is the value in _RAM_2094_MatchCacheWritePointer now)
+    ; (hl is the value in RAM_MatchCacheWritePointer now)
     ld a, h
-    cp (_RAM_2100_MatchCache + _sizeof__RAM_2100_MatchCache) >> 8
+    cp (RAM_MatchCache + _sizeof_RAM_MatchCache) >> 8
     jr nz, _DoSearch
     ; Save where we got to, as we can't track all RAM addresses at once -
     ; there are up to 16K of them to track and we have space to track 1984 of them
     ld a, e
-    ld (_RAM_2098_BytesRemainingToSearch.Lo), a
+    ld (RAM_BytesRemainingToSearch.Lo), a
     ld a, d
-    ld (_RAM_2098_BytesRemainingToSearch.Hi), a
+    ld (RAM_BytesRemainingToSearch.Hi), a
     ld a, c
-    ld (_RAM_209A_NextAddressForSearch.Lo), a
+    ld (RAM_NextAddressForSearch.Lo), a
     ld a, b
-    ld (_RAM_209A_NextAddressForSearch.Hi), a
+    ld (RAM_NextAddressForSearch.Hi), a
     ld a, 1
-    ld (_RAM_209C_IncompleteSearch), a
+    ld (RAM_IncompleteSearch), a
     ret
 
 _MatchFound:
 ; d = metadata for search:
 ;     "lives" mode: index of matched value in the candidates (0-5)
 ;     "timer" mode: ScannerMode_Timer (extra info discarded)
-;     Other modes: the current value of _RAM_208C_ScannerMode
+;     Other modes: the current value of RAM_ScannerMode
 ; e = matched value
 ; bc = address of matched value
 ; All four are stored to the "match cache"
     ; Get pointer for where to store the match data?
-    ld a, (_RAM_2094_MatchCacheWritePointer.Lo)
+    ld a, (RAM_MatchCacheWritePointer.Lo)
     ld l, a
-    ld a, (_RAM_2094_MatchCacheWritePointer.Hi)
+    ld a, (RAM_MatchCacheWritePointer.Hi)
     ld h, a
     ; Store match info
     ld a, d
@@ -995,9 +1015,9 @@ _MatchFound:
     inc hl
     ; Save pointer
     ld a, l
-    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
+    ld (RAM_MatchCacheWritePointer.Lo), a
     ld a, h
-    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    ld (RAM_MatchCacheWritePointer.Hi), a
     ret
 
 _GetHighNibble:
@@ -1023,23 +1043,23 @@ _ComputeFractionsToLHA:
 
 PerformSearchUpdate:
 ; a = scanner mode + flags
-    ld (_RAM_208C_ScannerMode), a
+    ld (RAM_ScannerMode), a
     call ShowSearchMemoryText
     
     ; Check if the end-of-cache pointer is at the start of the cache
-    ld hl, _RAM_2100_MatchCache
-    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
+    ld hl, RAM_MatchCache
+    ld a, (RAM_MatchCacheEndPointer.Hi)
     cp h
     jr nz, +
-    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
+    ld a, (RAM_MatchCacheEndPointer.Lo)
     cp l
     ret z ; If matching, there is no update to do
 +:
     ; Point to the start of the match cache
     ld a, l
-    ld (_RAM_2094_MatchCacheWritePointer.Lo), a
+    ld (RAM_MatchCacheWritePointer.Lo), a
     ld a, h
-    ld (_RAM_2094_MatchCacheWritePointer.Hi), a
+    ld (RAM_MatchCacheWritePointer.Hi), a
 _PerformSearchUpdate_loop:
     ; Read the match into d, e, bc
     ld a, (hl)
@@ -1064,7 +1084,7 @@ _PerformSearchUpdate_loop:
         push de
           ; Look up the function that checks it
           ld hl, SearchUpdateFunctions
-          ld a, (_RAM_208C_ScannerMode)
+          ld a, (RAM_ScannerMode)
           ld b, a
           and $0E ; Mask to mode bits
           ld e, a
@@ -1082,9 +1102,9 @@ _PerformSearchUpdate_loop:
         jp (hl)
     
 SearchUpdate_Lives:
-        ; d is an index into _RAM_20c0_SearchCandidates to say which of the 6
+        ; d is an index into RAM_LivesSearchCandidates to say which of the 6
         ; matched for this candidate. We look up the new value...
-        ld hl, _RAM_20c0_SearchCandidates
+        ld hl, RAM_LivesSearchCandidates
         ld a, d
         and %11111110 ; This clears the high bit as we try both the normal and BCD versions
         ld e, a
@@ -1122,7 +1142,7 @@ _Positive:
         jr _DiscardMatch
 
 SearchUpdate_Power:
-        ; a is _RAM_208C_ScannerMode
+        ; a is RAM_ScannerMode
         ; d is the MatchData field for the current candidate
         cp d
         jr z, KeepIfHighNibbleNonZeroOrValueEqual ; Candidate was captured in the same state as the current selection
@@ -1187,7 +1207,7 @@ _DiscardMatch:
 _KeepMatch:
       pop bc
       pop de
-      ld a, (_RAM_208C_ScannerMode)
+      ld a, (RAM_ScannerMode)
       ld l, a
       or l
       jr z, +
@@ -1201,22 +1221,22 @@ _KeepMatch:
 +:    ; We call into this function in order to re-write the match cache "compacted"
       call _MatchFound
 ++: pop hl
-    ; Loop until we get to _RAM_2090_MatchCacheEndPointer
-    ld a, (_RAM_2090_MatchCacheEndPointer.Hi)
+    ; Loop until we get to RAM_MatchCacheEndPointer
+    ld a, (RAM_MatchCacheEndPointer.Hi)
     cp h
     jp nz, _PerformSearchUpdate_loop
-    ld a, (_RAM_2090_MatchCacheEndPointer.Lo)
+    ld a, (RAM_MatchCacheEndPointer.Lo)
     cp l
     jp nz, _PerformSearchUpdate_loop
 SaveMatchCacheEndPointer:
-    ld a, (_RAM_2094_MatchCacheWritePointer.Lo)
-    ld (_RAM_2090_MatchCacheEndPointer.Lo), a
-    ld a, (_RAM_2094_MatchCacheWritePointer.Hi)
-    ld (_RAM_2090_MatchCacheEndPointer.Hi), a
+    ld a, (RAM_MatchCacheWritePointer.Lo)
+    ld (RAM_MatchCacheEndPointer.Lo), a
+    ld a, (RAM_MatchCacheWritePointer.Hi)
+    ld (RAM_MatchCacheEndPointer.Hi), a
     ret
 
 SearchUpdate_Energy:
-        ; a is _RAM_208C_ScannerMode, low nibble is ScannerMode_Energy, high nibble is 0, 6, a, c for 100%, 75%, 50%, 25% respectively
+        ; a is RAM_ScannerMode, low nibble is ScannerMode_Energy, high nibble is 0, 6, a, c for 100%, 75%, 50%, 25% respectively
         ; d is the MatchData field for previous matches
         ; c is the candidate value
         ; If the value was captured at the same level as the new one, then we can only compare if they are both at the 100% level
@@ -1321,16 +1341,16 @@ ShowSelectionMenu_FirstItemActive:
     ld a, 1
 
 ShowSelectionMenu:
-    ld (_RAM_2081_CurrentItemRowIndex), a
-    ld a, (hl) ; first byte -> _RAM_2083_RowCount
+    ld (RAM_CurrentItemRowIndex), a
+    ld a, (hl) ; first byte -> RAM_RowCount
     inc hl
-    ld (_RAM_2083_RowCount), a
+    ld (RAM_RowCount), a
     push hl
 _UpdateArrow:
       ; Draw the arrow next to the right item
-      ld a, (_RAM_2083_RowCount)
+      ld a, (RAM_RowCount)
       ld d, a
-      ld a, (_RAM_2081_CurrentItemRowIndex)
+      ld a, (RAM_CurrentItemRowIndex)
       ld e, a
       push de
         LD_HL_Tilemap 7, 7
@@ -1377,18 +1397,18 @@ __Down:
       cp d
       jr c, ++
       ld a, 1
-++:   ld (_RAM_2081_CurrentItemRowIndex), a
+++:   ld (RAM_CurrentItemRowIndex), a
       jp _UpdateArrow
 
 __Start:
-      ld a, (_RAM_2081_CurrentItemRowIndex)
+      ld a, (RAM_CurrentItemRowIndex)
       ld c, a
-      ld a, (_RAM_208E_SignedMode)
-      cp $01
+      ld a, (RAM_ToggleMode)
+      cp 1
       jr nz, +
       ld c, a
       xor a
-      ld (_RAM_208E_SignedMode), a
+      ld (RAM_ToggleMode), a
 +:  pop de
     ; Move de on to the pointer for the index selected
 -:  dec c
@@ -1400,19 +1420,23 @@ __Start:
 +:  jp FunctionPointedByDE
 
 __Button1:
-      ld a, (_RAM_208E_SignedMode)
+      ; If RAM_ToggleMode == 1, button 1 toggles a "*" next to the item
+      ; and sets a bit in RAM_Sign
+      ld a, (RAM_ToggleMode)
       cp 1
       jr nz, _WaitForButton
-      
+      ; Select the bit for the e'th item
       ld a, $80
 -:    rlca
       dec e
       jr nz, -
+      ; Flip it in RAM_Sign
       ld e, a
-      ld a, (_RAM_208D_Sign)
+      ld a, (RAM_Sign)
       xor e
       ld e, a
-      ld (_RAM_208D_Sign), a
+      ld (RAM_Sign), a
+      ; Re-draw the appropriate column
       LD_HL_Tilemap 8, 7
       ld bc, $0040 ; One row
 -:    call SetVRAMAddressToHL
@@ -1440,42 +1464,42 @@ EditHex:
 ; de = name table address to draw at
 ; bc = address of data to edit
 
-    ; Copy data from (hl) to _RAM_2080_CurrentItemDigit..3 and _RAM_208A_LowNibbleMaxValue..b
+    ; Copy data from (hl) to RAM_CurrentItemDigit..3 and RAM_LowNibbleMaxValue..b
     ld a, (hl)
     inc hl
-    ld (_RAM_2080_CurrentItemDigit), a
+    ld (RAM_CurrentItemDigit), a
     ld a, (hl)
     inc hl
-    ld (_RAM_2081_CurrentItemRowIndex), a
+    ld (RAM_CurrentItemRowIndex), a
     ld a, (hl)
     inc hl
-    ld (_RAM_2082_HexDigitsPerRow), a
+    ld (RAM_HexDigitsPerRow), a
     ld a, (hl)
     inc hl
-    ld (_RAM_2083_RowCount), a
+    ld (RAM_RowCount), a
     ld a, (hl)
     inc hl
-    ld (_RAM_208A_LowNibbleMaxValue), a
+    ld (RAM_LowNibbleMaxValue), a
     ld a, (hl)
     inc hl
-    ld (_RAM_208B_HighNibbleMaxValue), a
+    ld (RAM_HighNibbleMaxValue), a
     push hl
       ; save args
       ld a, e
-      ld (_RAM_2086_NameTableLocationBase.Lo), a
+      ld (RAM_NameTableLocationBase.Lo), a
       ld a, d
-      ld (_RAM_2086_NameTableLocationBase.Hi), a
+      ld (RAM_NameTableLocationBase.Hi), a
       ld a, c
-      ld (_RAM_2088_DataLocation.Lo), a
+      ld (RAM_DataLocation.Lo), a
       ld a, b
-      ld (_RAM_2088_DataLocation.Hi), a
+      ld (RAM_DataLocation.Hi), a
 _loop:
       ; Compute name table address of current item
-      ld a, (_RAM_2081_CurrentItemRowIndex)
+      ld a, (RAM_CurrentItemRowIndex)
       ld e, a
-      ld a, (_RAM_2086_NameTableLocationBase.Lo)
+      ld a, (RAM_NameTableLocationBase.Lo)
       ld l, a
-      ld a, (_RAM_2086_NameTableLocationBase.Hi)
+      ld a, (RAM_NameTableLocationBase.Hi)
       ld h, a
       push hl
         ; Offset name table address by row index 
@@ -1485,20 +1509,20 @@ _loop:
         add hl, bc
         jr -
         ; Then by the digit index
-+       ld a, (_RAM_2080_CurrentItemDigit)
++       ld a, (RAM_CurrentItemDigit)
         dec a
         add a, a
         ld c, a
         add hl, bc
         ld a, l
-        ld (_RAM_2084_NameTableLocation.Lo), a
+        ld (RAM_NameTableLocation.Lo), a
         ld a, h
-        ld (_RAM_2084_NameTableLocation.Hi), a
+        ld (RAM_NameTableLocation.Hi), a
       pop hl
       ; Restore pointer to de
-      ld a, (_RAM_2088_DataLocation.Lo) 
+      ld a, (RAM_DataLocation.Lo) 
       ld e, a
-      ld a, (_RAM_2088_DataLocation.Hi)
+      ld a, (RAM_DataLocation.Hi)
       ld d, a
       ; Draw rows/columns from there to the base VRAM address
       call _LABEL_8AB_PrintHex
@@ -1510,13 +1534,13 @@ _loop:
       ld e, a
       
       ; Get data in bc, hl
-      ld a, (_RAM_2080_CurrentItemDigit)
+      ld a, (RAM_CurrentItemDigit)
       ld c, a
-      ld a, (_RAM_2081_CurrentItemRowIndex)
+      ld a, (RAM_CurrentItemRowIndex)
       ld b, a
-      ld a, (_RAM_2088_DataLocation.Lo)
+      ld a, (RAM_DataLocation.Lo)
       ld l, a
-      ld a, (_RAM_2088_DataLocation.Hi)
+      ld a, (RAM_DataLocation.Hi)
       ld h, a
       
       ; Check buttons
@@ -1531,9 +1555,9 @@ _loop:
       jr nz, _Button1
       
       ; Might be a cursor then. Get the limits in hl...
-      ld a, (_RAM_2082_HexDigitsPerRow)
+      ld a, (RAM_HexDigitsPerRow)
       ld l, a
-      ld a, (_RAM_2083_RowCount)
+      ld a, (RAM_RowCount)
       ld h, a
       
       ; And then check...
@@ -1560,7 +1584,7 @@ _Left:ld a, c
       dec a
       jr nz, +
       ld a, l
-+:    ld (_RAM_2080_CurrentItemDigit), a
++:    ld (RAM_CurrentItemDigit), a
       jp _loop
       
 _Up:  ld a, b
@@ -1575,17 +1599,17 @@ _Down:inc h
       cp h
       jr c, +
       ld a, 1
-+:    ld (_RAM_2081_CurrentItemRowIndex), a
++:    ld (RAM_CurrentItemRowIndex), a
       jp _loop
       
 _Start:
       xor a
-      ld (_RAM_208E_SignedMode), a
+      ld (RAM_SignedMode), a
     pop de
     jp FunctionPointedByDE
 
 _Button1:
-      ld a, (_RAM_208E_SignedMode)
+      ld a, (RAM_SignedMode)
       cp 1
       jr z, _Button1_Signed
       
@@ -1594,7 +1618,7 @@ _Button1:
       add a, e
       and $0F
       ld c, a
-      ld a, (_RAM_208A_LowNibbleMaxValue)
+      ld a, (RAM_LowNibbleMaxValue)
       cp c
       jr nc, +
       ld c, 0 ; Wrap at max value
@@ -1603,14 +1627,14 @@ _Button1:
       add a, d
       and $F0
       ld b, a
-      ld a, (_RAM_208B_HighNibbleMaxValue)
+      ld a, (RAM_HighNibbleMaxValue)
       cp b
       jr nc, ++
       xor a
       jr +++
 
 _Button2:
-      ld a, (_RAM_208E_SignedMode)
+      ld a, (RAM_SignedMode)
       cp 1
       jr z, _Button2_Signed
       
@@ -1618,7 +1642,7 @@ _Button2:
       sub e
       and $0F
       ld c, a
-      ld a, (_RAM_208A_LowNibbleMaxValue)
+      ld a, (RAM_LowNibbleMaxValue)
       cp c
       jr nc, +
       ld c, a
@@ -1626,7 +1650,7 @@ _Button2:
       sub d
       and $F0
       ld b, a
-      ld a, (_RAM_208B_HighNibbleMaxValue)
+      ld a, (RAM_HighNibbleMaxValue)
       cp b
       jr c, +++
 
@@ -1636,7 +1660,7 @@ _Button2:
       jp _loop
 
 _Button1_Signed:
-    ld a, (_RAM_208D_Sign)
+    ld a, (RAM_Sign)
     or a
     jr nz, ++
 -:
@@ -1646,27 +1670,27 @@ _Button1_Signed:
     add a, e
     and $0F
     ld c, a
-    ld a, (_RAM_208A_LowNibbleMaxValue)
+    ld a, (RAM_LowNibbleMaxValue)
     cp c
     jr nc, +
     ld c, 9 ; Wrap to 9
-    ; Flip sign?
-    ld a, (_RAM_208D_Sign)
+    ; Flip sign
+    ld a, (RAM_Sign)
     xor $10
-    ld (_RAM_208D_Sign), a
+    ld (RAM_Sign), a
 +:  ; Repeat for left digit
     ld a, b
     add a, d
     and $F0
     ld b, a
-    ld a, (_RAM_208B_HighNibbleMaxValue)
+    ld a, (RAM_HighNibbleMaxValue)
     cp b
     jr nc, +++
     xor a
     jr ++++
 
 _Button2_Signed:
-    ld a, (_RAM_208D_Sign)
+    ld a, (RAM_Sign)
     or a
     jr nz, -
 ++:
@@ -1674,19 +1698,19 @@ _Button2_Signed:
     sub e
     and $0F
     ld c, a
-    ld a, (_RAM_208A_LowNibbleMaxValue)
+    ld a, (RAM_LowNibbleMaxValue)
     cp c
     jr nc, +
     ld c, 1
-    ld a, (_RAM_208D_Sign)
+    ld a, (RAM_Sign)
     xor $10
-    ld (_RAM_208D_Sign), a
+    ld (RAM_Sign), a
 +:
     ld a, b
     sub d
     and $F0
     ld b, a
-    ld a, (_RAM_208B_HighNibbleMaxValue)
+    ld a, (RAM_HighNibbleMaxValue)
     cp b
     jr c, ++++
 +++:
@@ -1695,7 +1719,7 @@ _Button2_Signed:
     or c
     ld (hl), a
     ld c, '+'
-    ld a, (_RAM_208D_Sign)
+    ld a, (RAM_Sign)
     or a
     jr z, +
     ld c, '-'
@@ -1713,9 +1737,9 @@ _GetByteToEdit:
     ; Returns a = b = byte to edit, de = $0100 for left digit, $0001 for right
     ; d is the amount to move the left digit, e for the right 
     dec c
-    ; Offset hl by _RAM_2082_HexDigitsPerRow * b
+    ; Offset hl by RAM_HexDigitsPerRow * b
     ld d, 0
-    ld a, (_RAM_2082_HexDigitsPerRow)
+    ld a, (RAM_HexDigitsPerRow)
     rrca ; Divide by 2 to get bytes per row
     ld e, a ; Put it in de
 -:  dec b
@@ -1754,7 +1778,7 @@ Delay:
 
 ; Reads a pointer from (de) and jumps to it.
 ; Calling this function will therefore call the pointed function.
-FunctionPointedByDE: ; $8a5
+FunctionPointedByDE:
     ld a, (de)
     ld l, a
     inc de
@@ -1766,10 +1790,10 @@ _LABEL_8AB_PrintHex:
 ; hl = tilemap VRAM address
 ; de = address of data to write
 ; _RAM_2083 = row count
-; _RAM_2082_HexDigitsPerRow = nibbles per row
-    ld a, (_RAM_2083_RowCount) ; Row count
+; RAM_HexDigitsPerRow = nibbles per row
+    ld a, (RAM_RowCount) ; Row count
     ld b, a
---: ld a, (_RAM_2082_HexDigitsPerRow)
+--: ld a, (RAM_HexDigitsPerRow)
     rrca ; Divide by 2 as we have two nibbles per byte
     ld c, a
     push hl
@@ -1810,10 +1834,10 @@ _PrintNibble:
     add a, 'A'-'9'-1 ; By converting to A-F
 +:  ; Compare to the current "cursor" position
     push af
-      ld a, (_RAM_2084_NameTableLocation.Hi)
+      ld a, (RAM_NameTableLocation.Hi)
       cp h
       jr nz, +
-      ld a, (_RAM_2084_NameTableLocation.Lo)
+      ld a, (RAM_NameTableLocation.Lo)
       cp l
       jr nz, +
     pop af
@@ -1909,7 +1933,7 @@ DrawTwoPartTextScreen2:
     call EmitText
     ret
 
-ZeroVRAM: ; $95e
+ZeroVRAM:
     ; HL = address
     ; DE = byte count / 2
     call SetVRAMAddressToHL
@@ -1941,7 +1965,7 @@ WriteAToVDPAs16Bit:
       ld bc, 64 ; Add a row
       add hl, bc
     pop bc
-EmitText: ; $980
+EmitText:
 .define LINE_BREAK $8d
 .define EOS $83
     call SetVRAMAddressToHL
@@ -2261,14 +2285,14 @@ Text_ScannerMenu:
 
 SelectionMenuData_ScannerMenu:
 .db 4 
-.dw ContinueScanner, Menu_EnterCodes, ClearScannerMemory, Menu_ListCurrentCandidates
+.dw ContinueScanner, Menu_EnterCodes, ClearMemory, Menu_ListCurrentCandidates
 
 Text_ParametersList:
 .asc " -PARAMETERS  LIST- ", EOS
 
 ParametersListData:
 .db 8, 6 ; 8x6 hex
-.dw _LABEL_3AC_
+.dw ParametersListSubmitted
 
 Text_NothingValid:
 .asc "  THERE IS NOTHING  ", LINE_BREAK
