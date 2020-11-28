@@ -515,6 +515,10 @@ EnergyScanner_25:
     jr SearchUpdatePreparationDone
 
 ; "Power" mode
+; This searches for values based on being less than, equal to or greater than a start value.
+; This loses some ability to discard values when they are captured in "smaller" or "greater"
+; mode, because for example if you know that the captured valus is smaller than the value
+; wanted, you can only know if the current value is discardable if it is even smaller (and marked as smaller). Thus it may help to use gradually diverging values from the start point.
 
 Menu_PowerScanner:
     ld bc, Text_PowerScanner
@@ -535,16 +539,20 @@ Menu_PowerScannerUpdate:
     ld hl, SelectionMenuData_PowerScannerUpdate
     jp ShowSelectionMenu_FirstItemActive
 
+.define ScannerMode_Power_Equal ScannerMode_Power | $00
+.define ScannerMode_Power_Greater ScannerMode_Power | $40
+.define ScannerMode_Power_Smaller ScannerMode_Power | $80
+
 PowerScanner_Same:
-    ld a, $06
+    ld a, ScannerMode_Power_Equal
     jr SearchUpdatePreparationDone
 
 PowerScanner_Greater:
-    ld a, $46
+    ld a, ScannerMode_Power_Greater
     jr SearchUpdatePreparationDone
 
 PowerScanner_Smaller:
-    ld a, $86
+    ld a, ScannerMode_Power_Smaller
     ; Fall through
     
 SearchUpdatePreparationDone:
@@ -1092,22 +1100,25 @@ _Positive:
 
 SearchUpdate_Power:
         ; a is _RAM_208C_ScannerMode
-        ; d is the MatchData field for the current candidate:
-        ; $60
+        ; d is the MatchData field for the current candidate
         cp d
-        jr z, _LABEL_5A9_
-        cp $46
-        jr z, +
-        cp $86
-        jr z, ++
+        jr z, KeepIfHighNibbleNonZeroOrValueEqual ; Candidate was captured in the same state as the current selection
+        cp ScannerMode_Power_Greater
+        jr z, _Greater
+        cp ScannerMode_Power_Smaller
+        jr z, _Smaller
         ld a, d
-        cp $46
-        jr z, ++
-+:      ld a, e
+        cp ScannerMode_Power_Greater
+        jr z, _Smaller
+_Greater:
+        ; Check candidate is greater than the stored value (which is equal to or smaller than the original)
+        ld a, e
         cp c
         jr c, _KeepMatch
         jr _DiscardMatch
-++:     ld a, c
+_Smaller:
+        ; Check candidate is smaller than the stored value (which is equal or greater than the original)
+        ld a, c
         cp e
         jr c, _KeepMatch
         jr _DiscardMatch
@@ -1119,19 +1130,22 @@ SearchUpdate_Status:
         xor e
         ld e, a
 +:      xor a
-        jr _LABEL_5A9_
+        jr KeepIfHighNibbleNonZeroOrValueEqual
 
 SearchUpdate_Other:
         cp d
-        jr z, _LABEL_5A9_
+        jr z, KeepIfHighNibbleNonZeroOrValueEqual
         ld a, c
         cp e
         jr z, _DiscardMatch
         jr _KeepMatch
 
-_LABEL_5A9_:
+KeepIfHighNibbleNonZeroOrValueEqual:
+        ; Check high nibble
         and $F0
+        ; Keep if non-zero
         jr nz, _KeepMatch
+        ; Else keep only if equal to the candidate
         ld a, c
         cp e
         jr z, _KeepMatch
@@ -1177,8 +1191,9 @@ SearchUpdate_Energy:
         ; a is _RAM_208C_ScannerMode, low nibble is ScannerMode_Energy, high nibble is 0, 6, a, c for 100%, 75%, 50%, 25% respectively
         ; d is the MatchData field for previous matches
         ; c is the candidate value
+        ; If the value was captured at the same level as the new one, then we can only compare if they are both at the 100% level
         cp d
-        jr z, _LABEL_5A9_
+        jr z, KeepIfHighNibbleNonZeroOrValueEqual
         cp ScannerMode_Energy_100
         jr z, _About100
         cp ScannerMode_Energy_75
