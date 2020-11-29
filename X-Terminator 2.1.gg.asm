@@ -21,10 +21,12 @@
 .define SAVE_RAM_ENABLE $08
 .define SAVE_RAM_DISABLE $00
 
+.define ENGLISH
+
 .asciitable
     ; English font is mostly ASCII with some missing and some arrows...
     ; ASCII:  !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
-    ; Font:   !   % '‚Üê‚Üí*+,-./0123456789  < >  ABCDEFGHIJKLMNOPQRSTUVWXYZ[‚Üí]‚Üë‚Üì
+    ; Font:   !   % '??*+,-./0123456789  < >  ABCDEFGHIJKLMNOPQRSTUVWXYZ[?]??
     ; This is enough for us to map it
     map ' ' = $20
 .enda
@@ -788,7 +790,7 @@ _CodeInMiddle:
         ld (de), a
         inc de
         jr -
-_CodeAtEnd:     
+_CodeAtEnd:
         ld a, e
         ld (RAM_MatchCacheEndPointer.Lo), a
         ld a, d
@@ -2035,32 +2037,40 @@ JapaneseFont:
     ReturnAddress dw
 .endst
 
+.macro Text args english, japanese, terminator
+.ifdef ENGLISH
+.asc \1, \3
+.else
+.asc \2, \3
+.endif
+.endm
+
 Text_Title:
-.asc "  GG  X-TERMINATOR  ", LINE_BREAK ; line break
-.asc "               V2.1 ", EOS ; end
+  Text "  GG  X-TERMINATOR  ", "  GG  X-TERMINATOR  ", LINE_BREAK
+  Text "               V2.1 ", "               V2.1J", EOS
 Text_TitleInstructions:
-.asc " [ 1 2 ] SEL. DIGIT ", LINE_BREAK
-.asc " [ ( ) ] SEL. DIR   ", LINE_BREAK
-.asc " [ ^ _ ] SEL. ITEM  ", LINE_BREAK
-.asc " [START] TO ACTION  ", EOS
+  Text " [ 1 2 ] SEL. DIGIT ", " [ 1 2 ] Ω≥ºﬁæ›¿∏   ", LINE_BREAK
+  Text " [ ( ) ] SEL. DIR   ", " [ ( ) ] –∑ﬁÀ¿ﬁÿ    ", LINE_BREAK
+  Text " [ ^ _ ] SEL. ITEM  ", " [ ^ _ ] ≥¥º¿       ", LINE_BREAK
+  Text " [START] TO ACTION  ", " [START] πØ√≤       ", EOS
 
 Text_MainMenu:
-.asc " ----MAIN  MENU---- ", EOS
-.asc "  AUTO CODE SCANER  ", LINE_BREAK
-.asc "  ENTER CODES       ", EOS
+  Text " ----MAIN  MENU---- ", " -----“≤› “∆≠∞----- ", EOS
+  Text "  AUTO CODE SCANER  ", "  ≥◊‹ªﬁ √ﬁ∞¿ ª∞¡    ", LINE_BREAK
+  Text "  ENTER CODES       ", "  ≥◊‹ªﬁ √ﬁ∞¿ ‰„     ", EOS
 
 SelectionMenuData_MainMenu:
 .db 2 ; Number of options
 .dw Menu_AutoCodeScanner, Menu_EnterCodes
 
 Text_EnterCodes:
-.asc " ---ENTER  CODES--- ", EOS
-.asc "  CODE 0: 00000000  ", LINE_BREAK
-.asc "  CODE 1: 00000000  ", LINE_BREAK
-.asc "  CODE 2: 00000000  ", LINE_BREAK
-.asc "  CODE 3: 00000000  ", LINE_BREAK
-.asc "  CODE 4: 00000000  ", LINE_BREAK
-.asc "  CODE 5: 00000000  ", EOS
+  Text " ---ENTER  CODES--- ", " ----≥◊‹ªﬁ √ﬁ∞¿---- ", EOS
+  Text "  CODE 0: 00000000  ", "  CODE 0: 00000000  ", LINE_BREAK
+  Text "  CODE 1: 00000000  ", "  CODE 1: 00000000  ", LINE_BREAK
+  Text "  CODE 2: 00000000  ", "  CODE 2: 00000000  ", LINE_BREAK
+  Text "  CODE 3: 00000000  ", "  CODE 3: 00000000  ", LINE_BREAK
+  Text "  CODE 4: 00000000  ", "  CODE 4: 00000000  ", LINE_BREAK
+  Text "  CODE 5: 00000000  ", "  CODE 5: 00000000  ", EOS
 EditHexData_EnterCodes:
 .db $03 ; Start X position of cursor (skipping leading 00)
 .db $01 ; Start index for editor
@@ -2071,31 +2081,30 @@ EditHexData_EnterCodes:
 .dw Menu_EnterCodes_PostEdit
 
 Text_ScannerType:
-.asc " ---SCANER  TYPE--- ", EOS
-.asc "  LIVES OR NO. < 99 ", LINE_BREAK
-.asc "  TIMER OR NO. > 99 ", LINE_BREAK
-.asc "  ENERGY BAR        ", LINE_BREAK
-.asc "  POWER BAR         ", LINE_BREAK
-.asc "  STATUS            ", LINE_BREAK
-.asc "  OTHER POSSIBILTY  ", LINE_BREAK
-.asc "  QUIT TO MAIN MENU ", EOS
+  Text " ---SCANER  TYPE--- ", " --≥◊‹ªﬁ √ﬁ∞¿ ª∞¡-- ", EOS
+  Text "  LIVES OR NO. < 99 ", "  ∆›Ωﬁ≥•∑Ω≥ < 99    ", LINE_BREAK
+  Text "  TIMER OR NO. > 99 ", "  ºﬁ∂›•¿≤œ∞ > 99    ", LINE_BREAK
+  Text "  ENERGY BAR        ", "  ¥»Ÿ∑ﬁ∞ πﬁ∞ºﬁ      ", LINE_BREAK
+  Text "  POWER BAR         ", "   ﬁ◊›Ω  πﬁ∞ºﬁ      ", LINE_BREAK
+  Text "  STATUS            ", "   ﬂ‹∞   √ﬁ∞¿       ", LINE_BREAK
+  Text "  OTHER POSSIBILTY  ", "  ΩÕﬂº¨Ÿ √ﬁ∞¿       ", LINE_BREAK
+  Text "  QUIT TO MAIN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", EOS
 
 SelectionMenuData_ScannerType:
 .db 7 
 .dw Menu_LivesScanner, Menu_TimerScanner, Menu_EnergyScanner, Menu_PowerScanner, Menu_StatusScanner, Menu_OtherPossibilityScanner, Menu_MainMenu
 
 Text_LivesScanner:
-.asc " ---LIVES SCANER--- ", EOS
-; Followed by
-.asc "         00         ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "ENTER THE VALUE FOR ", LINE_BREAK
-.asc "THE NUMBER OF LIVES ", LINE_BREAK
-.asc "OR ETC              ", EOS
+  Text " ---LIVES SCANER--- ", " --∆›Ωﬁ≥•∑Ω≥  ª∞¡-- ", EOS
+  Text "         00         ", "         00         ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "ENTER THE VALUE FOR ", "                    ", LINE_BREAK
+  Text "THE NUMBER OF LIVES ", "πﬁ›ªﬁ≤ … ∆›Ωﬁ≥•∑Ω≥ ¶", LINE_BREAK
+  Text "OR ETC              ", "‰„‡·‚ÂÁ             ", EOS
 
 EditHexData_LivesScanner:
 .db $02 ; Start X position of cursor (skipping leading 0)
@@ -2107,15 +2116,15 @@ EditHexData_LivesScanner:
 .dw Menu_LivesScanner_PostEdit
 
 Text_LivesScannerUpdate:
-.asc "         00         ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "ENTER THE NEW VALUE ", LINE_BREAK
-.asc "FOR THE NUMBER OF   ", LINE_BREAK
-.asc "LIVES OR ETC        ", EOS
+  Text "         00         ", "         00         ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "ENTER THE NEW VALUE ", "                    ", LINE_BREAK
+  Text "FOR THE NUMBER OF   ", "±¿◊º≤ ∆›Ωﬁ≥•∑Ω≥ ¶   ", LINE_BREAK
+  Text "LIVES OR ETC        ", "‰„‡·‚ÂÁ             ", EOS
 
 EditHexData_LivesScannerUpdate:
 .db $02 ; Same as above
@@ -2127,32 +2136,31 @@ EditHexData_LivesScannerUpdate:
 .dw Menu_LivesScannerUpdate_PostEdit
 
 Text_TimerScanner:
-.asc " ---TIMER SCANER--- ", EOS
-; Followed by
-.asc "  CURRENT START     ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "USE THIS METHOD FOR ", LINE_BREAK
-.asc "SEARCH VALUE LIKE   ", LINE_BREAK
-.asc "TIMER OR NO. > 99   ", EOS
+  Text " ---TIMER SCANER--- ", " --ºﬁ∂›•¿≤œ∞  ª∞¡-- ", EOS
+  Text "  CURRENT START     ", "  Ω¿∞ƒ … ±¿≤ æØ√≤   ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "USE THIS METHOD FOR ", "                    ", LINE_BREAK
+  Text "SEARCH VALUE LIKE   ", "ºﬁ∂›•¿≤œ∞ … √ﬁ∞¿ ª∞¡", LINE_BREAK
+  Text "TIMER OR NO. > 99   ", "¶ µ∫≈≤œΩ > 99       ", EOS
 
 SelectionMenuData_TimerScanner:
 .db 2 
 .dw Menu_TimerScanner_PostEdit, Menu_MainMenu
 
 Text_TimerScannerUpdate:
-.asc "        +00         ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "ENTER DIFFERENCE    ", LINE_BREAK
-.asc "BETWEEN START VALUE ", LINE_BREAK
-.asc "AND CURRENT VALUE   ", EOS
+  Text "        +00         ", "        +00         ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "Ω¿∞ƒ… ±¿≤ƒ πﬁ›ªﬁ≤…  ", LINE_BREAK
+  Text "ENTER DIFFERENCE    ", "±¿≤… ª¶ ‰„‡·‚ÂÁ     ", LINE_BREAK
+  Text "BETWEEN START VALUE ", "”º Ω¿∞ƒ∂ﬁ100√ﬁ πﬁ›ªﬁ", LINE_BREAK
+  Text "AND CURRENT VALUE   ", "≤∂ﬁ96≈◊ ∞4ƒ ‰„‡·‚ÂÁ ", EOS
 
 EditHexData_TimerScanner :
 .db $02 ; Start X position of cursor (skipping leading 0)
@@ -2164,169 +2172,181 @@ EditHexData_TimerScanner :
 .dw Menu_TimerScannerUpdate_PostEdit
 
 Text_EnergyScanner:
-.asc " --ENERGY  SCANER-- ", EOS
-.asc "  CURRENT START     ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "USE THIS METHOD FOR ", LINE_BREAK
-.asc "ENERGY BAR SHOULD   ", LINE_BREAK
-.asc "START IN FULL POWER ", EOS
+  Text " --ENERGY  SCANER-- ", " ----¥»Ÿ∑ﬁ∞ ª∞¡---- ", EOS
+  Text "  CURRENT START     ", "  √ﬁ∞¿ ª∞¡ Ω¿∞ƒ     ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "∫… ¥»Ÿ∑ﬁ∞√ﬁ∞¿ ª∞¡   ", LINE_BREAK
+  Text "USE THIS METHOD FOR ", "”∞ƒﬁ   ¥»Ÿ∑ﬁ∞ ∂ﬁ    ", LINE_BREAK
+  Text "ENERGY BAR SHOULD   ", "ºÆ∑¡ … ƒ∑∆ ª∞¡ ¶    ", LINE_BREAK
+  Text "START IN FULL POWER ", "Ω¿∞ƒ ºœΩ            ", EOS
 
 SelectionMenuData_EnergyScanner:
 .db 2
 .dw $026A, Menu_MainMenu
 
 Text_EnergyScannerUpdate:
-.asc "  SAME AS START     ", LINE_BREAK
-.asc "  ABOUT 75% OF START", LINE_BREAK
-.asc "  ABOUT 50% OF START", LINE_BREAK
-.asc "  ABOUT 25% OF START", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "CHOOSE PERCENTAGE   ", LINE_BREAK
-.asc "BETWEEN START VALUE ", LINE_BREAK
-.asc "AND CURRENT VALUE   ", EOS
+  Text "  SAME AS START     ", "  Ω¿∞ƒ ƒ µ≈ºﬁ∏◊≤    ", LINE_BREAK
+  Text "  ABOUT 75% OF START", "  Ω¿∞ƒ … ‘∏ 75%     ", LINE_BREAK
+  Text "  ABOUT 50% OF START", "  Ω¿∞ƒ … ‘∏ 50%     ", LINE_BREAK
+  Text "  ABOUT 25% OF START", "  Ω¿∞ƒ … ‘∏ 25%     ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  ¡≠≥º•“≤›“∆≠∞      ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "CHOOSE PERCENTAGE   ", "                    ", LINE_BREAK
+  Text "BETWEEN START VALUE ", "Ω¿∞ƒ ƒ πﬁ›ªﬁ≤ … ±¿≤ ", LINE_BREAK
+  Text "AND CURRENT VALUE   ", "… ª¶ ¥◊›√ﬁ‚ÂÁ       ", EOS
 
 SelectionMenuData_EnergyScannerUpdate:
 .db 5 
 .dw EnergyScanner_100, EnergyScanner_75, EnergyScanner_50, EnergyScanner_25, Menu_ScannerMenu
 
 Text_PowerScanner:
-.asc " ---POWER SCANER--- ", EOS
-.asc "  CURRENT START     ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "USE THIS METHOD FOR ", LINE_BREAK
-.asc "POWER BAR OR ETC    ", EOS
+  Text " ---POWER SCANER--- ", " --- ﬁ◊›Ω  πﬁ∞ºﬁ--- ", EOS
+  Text "  CURRENT START     ", "  Ω¿∞ƒ … ºﬁÆ≥¿≤æØ√≤ ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "∫… ”∞ƒﬁ   Ω¿∞ƒ …    ", LINE_BREAK
+  Text "                    ", "ºﬁÆ≥¿≤ ∂◊ øﬁ≥πﬁ›ΩŸ  ", LINE_BREAK
+  Text "USE THIS METHOD FOR ", " ﬁ∞ºﬁÆ≥ … √ﬁ∞¿ ¶    ", LINE_BREAK
+  Text "POWER BAR OR ETC    ", "ª∞¡ ºœΩ             ", EOS
 
 SelectionMenuData_PowerScanner:
 .db 2 
 .dw Menu_PowerScanner_PostEdit, Menu_MainMenu
 
 Text_PowerScannerUpdate:
-.asc "  SAME AS START     ", LINE_BREAK
-.asc "  GREATER THAN START", LINE_BREAK
-.asc "  SMALLER THAN START", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "CHOOSE DIFFERENCE   ", LINE_BREAK
-.asc "BETWEEN START VALUE ", LINE_BREAK
-.asc "AND CURRENT VALUE   ", EOS
+  Text "  SAME AS START     ", "  Ω¿∞ƒ ƒ µ≈ºﬁºﬁÆ≥¿≤ ", LINE_BREAK
+  Text "  GREATER THAN START", "  Ω¿∞ƒ ÷ÿ Ã¥√≤Ÿ     ", LINE_BREAK
+  Text "  SMALLER THAN START", "  Ω¿∞ƒ ÷ÿ ÕØ√≤Ÿ     ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "CHOOSE DIFFERENCE   ", "Ω¿∞ƒ … ºﬁÆ≥¿≤ ƒ     ", LINE_BREAK
+  Text "BETWEEN START VALUE ", "πﬁ›ªﬁ≤ … ºﬁÆ≥¿≤ …   ", LINE_BREAK
+  Text "AND CURRENT VALUE   ", "¡∂ﬁ≤¶ ¥◊›√ﬁ‚ÂÁ      ", EOS
 
 SelectionMenuData_PowerScannerUpdate:
 .db 4
 .dw PowerScanner_Same, PowerScanner_Greater, PowerScanner_Smaller, Menu_ScannerMenu
 
 Text_StatusScanner:
-.asc " --STATUS  SCANER-- ", EOS
-.asc "  CURRENT START     ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "USE THIS METHOD FOR ", LINE_BREAK
-.asc "OPTION OR WEAPON ETC", EOS
+  Text " --STATUS  SCANER-- ", " --- ﬂ‹∞√ﬁ∞¿ ª∞¡--- ", EOS
+  Text "  CURRENT START     ", "  √ﬁ∞¿ ª∞¡ Ω¿∞ƒ     ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "USE THIS METHOD FOR ", " ﬂ‹∞√ﬁ∞¿ ª∞¡ ”∞ƒﬁ ¶ ", LINE_BREAK
+  Text "OPTION OR WEAPON ETC", "Ω¿∞ƒ ºœΩ            ", EOS
 
 SelectionMenuData_StatusScanner:
 .db 2 
 .dw Menu_StatusScanner_PostEdit, Menu_MainMenu
 
 Text_StatusScannerUpdate:
-.asc "  SAME AS START     ", LINE_BREAK
-.asc "  OPPOSITE TO START ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "CHOOSE DIFFERENCE   ", LINE_BREAK
-.asc "BETWEEN START STATUS", LINE_BREAK
-.asc "AND CURRENT STATUS  ", EOS
+  Text "  SAME AS START     ", "  Ω¿∞ƒ ƒ µ≈ºﬁ Ω√∞¿Ω ", LINE_BREAK
+  Text "  OPPOSITE TO START ", "  Ω¿∞ƒ ƒ  ›¿≤… Ω√∞¿Ω", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  ¡≠≥º•“≤›“∆≠∞      ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "CHOOSE DIFFERENCE   ", "                    ", LINE_BREAK
+  Text "BETWEEN START STATUS", "Ω¿∞ƒ ƒ πﬁ›ªﬁ≤ … ±¿≤ ", LINE_BREAK
+  Text "AND CURRENT STATUS  ", "… ¡∂ﬁ≤¶ ¥◊›√ﬁ‚ÂÁ    ", EOS
 
 SelectionMenuData_StatusScannerUpdate:
 .db 3 
 .dw StatusScanner_Same, StatusScanner_Opposite, Menu_ScannerMenu
 
 Text_OtherPossibility:
-.asc " OTHER  POSSIBILITY ", EOS
-.asc "  CURRENT START     ", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "USE THIS METHOD IF  ", LINE_BREAK
-.asc "ALL OTHER METHOD    ", LINE_BREAK
-.asc "FAILED              ", EOS
+  Text " OTHER  POSSIBILITY ", " --ΩÕﬂº¨Ÿª∞¡ ”∞ƒﬁ-- ", EOS
+  Text "  CURRENT START     ", "  ª∞¡ Ω¿∞ƒ          ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  “≤›“∆≠∞ ∆ ”ƒﬁŸ    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "USE THIS METHOD IF  ", "                    ", LINE_BREAK
+  Text "ALL OTHER METHOD    ", "√ﬁ∞¿¥ÿ± … ΩÕﬁ√ ¶    ", LINE_BREAK
+  Text "FAILED              ", "ª∞¡ ºœΩ             ", EOS
 
 SelectionMenuData_OtherPossibility:
 .db 2
 .dw Menu_OtherPossibilityScanner_PostEdit, Menu_MainMenu
 
 Text_OtherPossibilityUpdate:
-.asc "  SAME AS START     ", LINE_BREAK
-.asc "  DIFFERENT TO START", LINE_BREAK
-.asc "  QUIT TO SCAN MENU ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "                    ", LINE_BREAK
-.asc "CHOOSE DIFFERENCE   ", LINE_BREAK
-.asc "BETWEEN START STATUS", LINE_BREAK
-.asc "AND CURRENT STATUS  ", EOS
+  Text "  SAME AS START     ", "  Ω¿∞ƒ ƒ µ≈ºﬁ       ", LINE_BREAK
+  Text "  DIFFERENT TO START", "  Ω¿∞ƒ ƒ ¡∂ﬁ≥       ", LINE_BREAK
+  Text "  QUIT TO SCAN MENU ", "  ¡≠≥º•“≤›“∆≠∞      ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "                    ", "                    ", LINE_BREAK
+  Text "CHOOSE DIFFERENCE   ", "                    ", LINE_BREAK
+  Text "BETWEEN START STATUS", "Ω¿∞ƒ ƒ πﬁ›ªﬁ≤ …     ", LINE_BREAK
+  Text "AND CURRENT STATUS  ", "ºﬁÆ≥¿≤¶ ¥◊›√ﬁ‚ÂÁ    ", EOS
 
 SelectionMenuData_OtherPossibilityUpdate:
 .db 3 
 .dw OtherPossibility_Same, OtherPossibility_Different, Menu_ScannerMenu
 
 Text_ScannerMenu:
-.asc " ---SCANER  MENU--- ", EOS
-.asc "  CONTINUE SCANER   ", LINE_BREAK
-.asc "  ENTER CODES       ", LINE_BREAK
-.asc "  CLEAR MEMORY      ", LINE_BREAK
-.asc "  POSSIBLE CODES    ", EOS
+  Text " ---SCANER  MENU--- ", " ---√ﬁ∞¿ª∞¡ “∆≠∞--- ", EOS
+  Text "  CONTINUE SCANER   ", "  ≥◊‹ªﬁ √ﬁ∞¿ ª∞¡    ", LINE_BREAK
+  Text "  ENTER CODES       ", "  ≥◊‹ªﬁ √ﬁ∞¿ ‰„     ", LINE_BREAK
+  Text "  CLEAR MEMORY      ", "  √ﬁ∞¿ ∏ÿ±•¡≠≥º     ", LINE_BREAK
+  Text "  POSSIBLE CODES    ", "  ≥◊‹ªﬁ √ﬁ∞¿ ÀÆ≥ºﬁ  ", EOS
 
 SelectionMenuData_ScannerMenu:
 .db 4 
 .dw ContinueScanner, Menu_EnterCodes, ClearMemory, Menu_ListCurrentCandidates
 
 Text_ParametersList:
-.asc " -PARAMETERS  LIST- ", EOS
+  Text " -PARAMETERS  LIST- ", " --≥◊‹ªﬁ √ﬁ∞¿ ÿΩƒ-- ", EOS
 
 ParametersListData:
 .db 8, 6 ; 8x6 hex
 .dw ParametersListSubmitted
 
 Text_NothingValid:
+.ifdef ENGLISH
 .asc "  THERE IS NOTHING  ", LINE_BREAK
 .asc "  VAILD NOW         ", EOS
+.else
+.asc "√ﬁ∞¿ ∂ﬁ –¬∂ÿœæ›     ", EOS
+.endif
 
 Text_ForOtherPossibilities:
+.ifdef ENGLISH
 .asc "  FOR OTHER         ", LINE_BREAK
 .asc "  POSSIBLITIES      ", LINE_BREAK
 .asc "  PLEASE CHOOSE     ", LINE_BREAK
 .asc "  OTHER TYPE OF     ", LINE_BREAK
 .asc "  AUTO CODE SCANNER ", EOS
+.else
+.asc "Œ∂…Œ≥Œ≥ ¶ ¥◊›√ﬁ‚ÂÁ° ", EOS
+.endif
 
 Text_PleaseContinue:
+.ifdef ENGLISH
 .asc "  PLEASE CONTINUE   ", LINE_BREAK
 .asc "  THE SCANNER       ", EOS
+.else
+.asc "√ﬁ∞¿ª∞¡ ¶ ¬¬ﬁπ√‚ÂÁ° ", EOS
+.endif
 
 Text_SearchMemory:
-.asc "    SEARCH MEMORY   ", LINE_BREAK
-.asc "     PLEASE WAIT    ", EOS
+  Text "    SEARCH MEMORY   ","   √ﬁ∞¿ ª∞¡ º√≤œΩ   ", LINE_BREAK
+  Text "     PLEASE WAIT    ","     ¡ÆØƒ œØ√ !     ", EOS
 
 Text_SwitchToScannerMode: ; Unused?
-.asc "   TURN SWITCH TO   ", LINE_BREAK
-.asc "    SCANER  MODE    ", EOS
+  Text "   TURN SWITCH TO   ", "Ω≤Ø¡ ¶ Ω∑¨≈∞ ”∞ƒﬁÕ  ", LINE_BREAK
+  Text "    SCANER  MODE    ", "∂¥√‚ÂÁ°             ", EOS
 
 SearchUpdateFunctions:
 .dw SearchUpdate_Lives, SearchUpdate_Timer, SearchUpdate_Energy, SearchUpdate_Power, SearchUpdate_Status, SearchUpdate_Other
