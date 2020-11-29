@@ -83,7 +83,7 @@
     RAM_unused20b8              dsb 8 ; Unused
     RAM_LivesSearchCandidates   dsb 6 ; Search value in hex, BCD, then both as n-1 and n+1
     RAM_unused20c6              dsb 58  ; Unused
-    RAM_MatchCache instanceof CheatCode $7c0 ; Holds info on matches - 4 bytes per entry, goes up to $4000
+    RAM_MatchCache instanceof CheatCode $7c0 ; Holds info on matches - 4 bytes per entry, goes up to $4000. Code relies on it being aligned to a multiple of 256 bytes.
 .ende
 
 ; Ports
@@ -364,18 +364,28 @@ Menu_EnterCodes_PostEdit:
     ld a, $3A
     ld (hl), a
     jp (hl)
-    ; Technical note: it would take 20 bytes (?) to simply assemble and copy the code and run it.
+    ; Technical note: it would take 20 bytes to simply assemble and copy the code and run it.
     ; This way is very marginally smaller but harder to read.
+/*
+    ld hl, _Code
+    ld de, $dffa
+    ld bc, _sizeof__Code
+    ldir
+    jp $dffa
+_Code:
+    ld a, ($0038) ; Trigger swap to game ROM
+    jp $0000
+*/
 
 ; "Lives" mode
 ; This searches for a byte value known to the user.
 ; If the user enters a value n, it is searched for as:
 ; - n
-; - BCD(n)
+; - fromBCD(n)
 ; - n+1
-; - BCD(n+1)
+; - fromBCD(n+1)
 ; - n-1
-; - BCD(n-1)
+; - fromBCD(n-1)
 ; When a match is found, which of these matched is recorded in the MatchData field of 
 ; the code, and future checks need to be in the same n+? pair; the BCD is flexible as 
 ; it may not be clear if BCD is in use yet.
@@ -520,7 +530,8 @@ EnergyScanner_25:
 ; This searches for values based on being less than, equal to or greater than a start value.
 ; This loses some ability to discard values when they are captured in "smaller" or "greater"
 ; mode, because for example if you know that the captured valus is smaller than the value
-; wanted, you can only know if the current value is discardable if it is even smaller (and marked as smaller). Thus it may help to use gradually diverging values from the start point.
+; wanted, you can only know if the current value is discardable if it is even smaller (and 
+; marked as smaller). Thus it may help to use gradually diverging values from the start point.
 
 Menu_PowerScanner:
     ld bc, Text_PowerScanner
@@ -638,7 +649,7 @@ OtherPossibility_Different:
     jr SearchUpdatePreparationDone
 
 ContinueScanner:
-; This is hooked up to varioud "continue scanner" menus. It just jumps to the stored
+; This is hooked up to various "continue scanner" menus. It just jumps to the stored
 ; menu handler.
     ld a, (RAM_NextScannerMenu.Lo)
     ld l, a
@@ -750,7 +761,7 @@ _NotSelected:
     jp Menu_ScannerMenu
 
 _Selected:
-      ; Copy 4 bytes fromo hl to bc
+      ; Copy 4 bytes from hl to bc
       push hl
         ld e, 4
 -:      ld a, (hl)
