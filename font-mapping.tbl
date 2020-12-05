@@ -1,0 +1,143 @@
+; Stuff that matches ASCII
+20= 
+21=!
+25=%
+27='
+2a=*
+2b=+
+2c=,
+2d=-
+2e=.
+2f=/
+30=0
+31=1
+32=2
+33=3
+34=4
+35=5
+36=6
+37=7
+38=8
+39=9
+; Note that this is rendered as blank 
+3a=:
+3c=<
+3e=>
+41=A
+42=B
+43=C
+44=D
+45=E
+46=F
+47=G
+48=H
+49=I
+4a=J
+4b=K
+4c=L
+4d=M
+4e=N
+4f=O
+50=P
+51=Q
+52=R
+53=S
+54=T
+55=U
+56=V
+57=W
+58=X
+59=Y
+5a=Z
+5b=[
+5d=]
+
+; Arrows
+28=🡐
+29=🡒
+5c=🡆
+5e=🡑
+5f=🡓
+
+; Japanese
+; Punctuation
+a1=。
+;a2=「
+;a3=」
+;a4=、
+a5=・
+; Katakana
+a6=ヲ
+; Small Katakana
+;a7=ァ
+;a8=ィ
+;a9=ゥ
+;aa=ェ
+;ab=ォ
+ac=ャ
+ad=ュ
+ae=ョ
+af=ッ
+; Prolonged sound mark
+b0=ー
+; Large Katakana
+b1=ア
+b2=イ
+b3=ウ
+b4=エ
+b5=オ
+b6=カ
+b7=キ
+b8=ク
+b9=ケ
+ba=コ
+bb=サ
+bc=シ
+bd=ス
+be=セ
+bf=ソ
+c0=タ
+c1=チ
+c2=ツ
+c3=テ
+c4=ト
+c5=ナ
+c6=ニ
+;c7=ヌ
+c8=ネ
+c9=ノ
+ca=ハ
+cb=ヒ
+cc=フ
+cd=ヘ
+ce=ホ
+cf=マ
+d0=ミ
+;d1=ム
+d2=メ
+d3=モ
+d4=ヤ
+;d5=ユ
+d6=ヨ
+d7=ラ
+d8=リ
+d9=ル
+;da=レ
+;db=ロ
+dc=ワ
+dd=ン
+; Dakuten and Handakuten
+de=゛
+df=゜
+; Hiragana and Kanji
+e0=し
+e1=て
+e2=下
+e3=力
+e4=入
+e5=さ
+;e6=へ
+e7=い
+;a8=゛ (alternate)
+;a9=゜ (alternate)
+;ea=の
