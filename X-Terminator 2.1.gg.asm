@@ -1,4 +1,3 @@
-; This disassembly was created using Emulicious (http://www.emulicious.net)
 .memorymap
     slotsize $2000
     slot 0 $0000 ; ROM
@@ -127,7 +126,7 @@
 
 .org $7
 JumpToMenuButton:
-.db $fe ; Seems to be a status register, or related to some switch state?
+.db $ff ; Seems to be a status register, or related to some switch state?
 
 .org $38
 InterruptHandler:
@@ -1366,7 +1365,7 @@ _UpdateArrow:
         ld a, ' '
         dec e
         jr nz, +
-        ld a, $5C ; Thick right arrow
+        ld a, $5C ; Thick right arrow 🡆
 +:      call WriteAToVDPAs16Bit
         add hl, bc
         dec d
